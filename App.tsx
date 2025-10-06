@@ -1,17 +1,47 @@
-import React from 'react';
-import { StyleSheet, Text, View, SafeAreaView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, Text, View, SafeAreaView, Button, FlatList } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import HomeScreen from './screens/HomeScreen';
+import DetailsScreen from './screens/DetailsScreen';
+import TransactionsScreen from './screens/TransactionsScreen';
+import SettingsScreen from './screens/SettingsScreen';
+import SplashScreen from './screens/SplashScreen';
+import { initializeDatabase, addNote, getNotes } from './lib/db';
+
+const Stack = createNativeStackNavigator();
 
 export default function App() {
+  const [notes, setNotes] = useState<{ id: number; title: string }[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      await initializeDatabase();
+      const data = await getNotes();
+      setNotes(data);
+    })();
+  }, []);
+
+  const handleAdd = async () => {
+    await addNote('Note ' + new Date().toLocaleTimeString());
+    const data = await getNotes();
+    setNotes(data);
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>CashHeal</Text>
-        <Text style={styles.subtitle}>Gestion Financière</Text>
-        <Text style={styles.description}>
-          Votre app de gestion financière est prête !
-        </Text>
-      </View>
-    </SafeAreaView>
+    <NavigationContainer>
+      <Stack.Navigator initialRouteName="Splash">
+        <Stack.Screen
+          name="Splash"
+          component={SplashScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Details" component={DetailsScreen} />
+        <Stack.Screen name="Transactions" component={TransactionsScreen} />
+        <Stack.Screen name="Settings" component={SettingsScreen} />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }
 
@@ -24,7 +54,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 20,
+    padding: 20,
   },
   title: {
     fontSize: 32,
@@ -39,10 +69,14 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     textAlign: 'center',
   },
-  description: {
-    fontSize: 16,
+  listTitle: {
+    marginTop: 8,
+    marginBottom: 8,
     color: '#ffffff',
-    textAlign: 'center',
-    lineHeight: 24,
+    fontWeight: '600',
+  },
+  noteItem: {
+    color: '#ffffff',
+    marginBottom: 6,
   },
 });
