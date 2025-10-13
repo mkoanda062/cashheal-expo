@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, useWindowDimensions, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions, Animated, Easing, Image } from 'react-native';
+import LaunchScreen from '../components/LaunchScreen';
 
 interface Props {
   navigation: any;
@@ -7,59 +8,29 @@ interface Props {
 
 export default function SplashScreen({ navigation }: Props) {
   const { width, height } = useWindowDimensions();
-  const logoSize = Math.min(width, height) * 0.8; // 80% du côté le plus court
   const opacity = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(0.9)).current;
-  const pulseLoopRef = useRef<any>(null);
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 500,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.spring(scale, {
-        toValue: 1,
-        damping: 10,
-        stiffness: 120,
-        mass: 0.7,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      // subtle pulse while waiting
-      pulseLoopRef.current = Animated.loop(
-        Animated.sequence([
-          Animated.timing(scale, {
-            toValue: 1.04,
-            duration: 600,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-          Animated.timing(scale, {
-            toValue: 1,
-            duration: 600,
-            easing: Easing.inOut(Easing.quad),
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      pulseLoopRef.current.start();
-    });
+    // Fade in
+    Animated.timing(opacity, {
+      toValue: 1,
+      duration: 800,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
 
+    // Après 2.5 secondes, naviguer vers l'onboarding
     const timer = setTimeout(() => {
-      // stop pulse and fade out before navigating
-      if (pulseLoopRef.current) {
-        pulseLoopRef.current.stop();
-      }
       Animated.timing(opacity, {
         toValue: 0,
-        duration: 300,
+        duration: 500,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }).start(() => {
-        navigation.replace('Home');
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Onboarding' }],
+        });
       });
     }, 2500);
 
@@ -68,14 +39,14 @@ export default function SplashScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <Animated.Image
-        source={require('../assets/ecrandelancement.png')}
+      <Animated.View 
         style={[
-          styles.logo,
-          { width: logoSize, height: logoSize, opacity, transform: [{ scale }] },
+          StyleSheet.absoluteFillObject,
+          { opacity }
         ]}
-        resizeMode="contain"
-      />
+      >
+        <LaunchScreen width={width} height={height} />
+      </Animated.View>
     </View>
   );
 }
@@ -83,12 +54,20 @@ export default function SplashScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#F1FFF3',
   },
-  logo: {
-    // width/height définis dynamiquement via useWindowDimensions
+  logoContainer: {
+    alignItems: 'center',
+  },
+  logoImage: {
+    width: 120,
+    height: 120,
+    marginBottom: 20,
+  },
+  appName: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#1a5d3a',
   },
 });
 

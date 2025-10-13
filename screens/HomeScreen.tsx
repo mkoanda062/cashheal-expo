@@ -11,6 +11,7 @@ export default function HomeScreen({ navigation }: Props) {
   const [balance, setBalance] = useState<Balance>({ total: 0, current: 0 });
   const [categories, setCategories] = useState<Category[]>([]);
   const [amountInput, setAmountInput] = useState<string>("");
+  const [expenseInput, setExpenseInput] = useState<string>("");
   const [selectedCategoryKey, setSelectedCategoryKey] = useState<string | null>(null);
   const [currency, setCurrency] = useState<'USD' | 'EUR' | 'GBP' | 'CAD' | 'XAF' | 'XOF'>('USD');
 
@@ -33,15 +34,21 @@ export default function HomeScreen({ navigation }: Props) {
 
   useEffect(() => {
     (async () => {
-      // Load persisted currency
-      const savedCurrency = await AsyncStorage.getItem('currency');
-      if (savedCurrency === 'USD' || savedCurrency === 'EUR' || savedCurrency === 'GBP' || savedCurrency === 'CAD' || savedCurrency === 'XAF' || savedCurrency === 'XOF') {
-        setCurrency(savedCurrency);
+      try {
+        // Load persisted currency
+        const savedCurrency = await AsyncStorage.getItem('currency');
+        if (savedCurrency === 'USD' || savedCurrency === 'EUR' || savedCurrency === 'GBP' || savedCurrency === 'CAD' || savedCurrency === 'XAF' || savedCurrency === 'XOF') {
+          setCurrency(savedCurrency);
+        }
+        const b = await getBalance();
+        const c = await getCategories();
+        console.log('Balance chargée:', b);
+        console.log('Catégories chargées:', c);
+        setBalance(b);
+        setCategories(c);
+      } catch (error) {
+        console.error('Erreur lors du chargement:', error);
       }
-      const b = await getBalance();
-      const c = await getCategories();
-      setBalance(b);
-      setCategories(c);
     })();
   }, []);
 
@@ -183,7 +190,7 @@ export default function HomeScreen({ navigation }: Props) {
               setBalance({ total: newTotal, current: newCurrent });
               await addTransaction('income', val, null);
               setAmountInput('');
-              showToast('Revenu enregistré');
+              showToast(`Revenu de ${formatAmount(val)} enregistré`);
             }}
           />
           <TouchableOpacity
@@ -194,11 +201,22 @@ export default function HomeScreen({ navigation }: Props) {
               // Revenue: n'affecte pas les catégories
               const newTotal = balance.total + val;
               const newCurrent = balance.current + val;
-              await setBalanceDB(newTotal, newCurrent);
-              setBalance({ total: newTotal, current: newCurrent });
-              await addTransaction('income', val, null);
-              setAmountInput('');
-              showToast('Revenu enregistré');
+              
+              try {
+                console.log('Tentative d\'enregistrement:', { val, newTotal, newCurrent, currentBalance: balance });
+                await setBalanceDB(newTotal, newCurrent);
+                console.log('Balance mise à jour en DB');
+                // Recharger les données depuis la DB pour s'assurer de la cohérence
+                const updatedBalance = await getBalance();
+                console.log('Balance rechargée:', updatedBalance);
+                setBalance(updatedBalance);
+                await addTransaction('income', val, null);
+                setAmountInput('');
+                showToast(`Revenu de ${formatAmount(val)} enregistré`);
+              } catch (error: any) {
+                console.error('Erreur détaillée lors de l\'enregistrement:', error);
+                showToast(`Erreur: ${error?.message || error}`);
+              }
             }}
           >
             <Text style={styles.btnText}>Ajouter revenu</Text>
@@ -209,13 +227,13 @@ export default function HomeScreen({ navigation }: Props) {
           <TextInput
             style={styles.input}
             keyboardType="numeric"
-            value={amountInput}
+            value={expenseInput}
             placeholder={currency === 'USD' ? '$ 15.00' : currency === 'EUR' ? '€ 15,00' : currency === 'GBP' ? '£ 15.00' : currency === 'CAD' ? 'CA$ 15.00' : '15,00'}
             placeholderTextColor="#9ca3af"
-            onChangeText={setAmountInput}
+            onChangeText={setExpenseInput}
             returnKeyType="done"
             onSubmitEditing={async () => {
-              const val = parseFloat(amountInput.replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0;
+              const val = parseFloat(expenseInput.replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0;
               if (!val) return;
               if (!selectedCategoryKey) {
                 Alert.alert('Catégorie requise', "Sélectionne une catégorie pour enregistrer une dépense.");
@@ -230,14 +248,14 @@ export default function HomeScreen({ navigation }: Props) {
               await setBalanceDB(newTotal, newCurrent);
               setBalance({ total: newTotal, current: newCurrent });
               await addTransaction('expense', val, selectedCategoryKey);
-              setAmountInput('');
+              setExpenseInput('');
               showToast('Dépense enregistrée');
             }}
           />
           <TouchableOpacity
             style={[styles.btn, { backgroundColor: '#7f1d1d' }]}
             onPress={async () => {
-              const val = parseFloat(amountInput.replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0;
+              const val = parseFloat(expenseInput.replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0;
               if (!val) return;
               if (!selectedCategoryKey) {
                 Alert.alert('Catégorie requise', "Sélectionne une catégorie pour enregistrer une dépense.");
@@ -252,7 +270,7 @@ export default function HomeScreen({ navigation }: Props) {
               await setBalanceDB(newTotal, newCurrent);
               setBalance({ total: newTotal, current: newCurrent });
               await addTransaction('expense', val, selectedCategoryKey);
-              setAmountInput('');
+              setExpenseInput('');
               showToast('Dépense enregistrée');
             }}
           >

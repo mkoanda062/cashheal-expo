@@ -3,10 +3,16 @@ import { StyleSheet, Text, View, SafeAreaView, Button, FlatList } from 'react-na
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import HomeScreen from './screens/HomeScreen';
+import ModernHomeScreen from './screens/ModernHomeScreen';
 import DetailsScreen from './screens/DetailsScreen';
 import TransactionsScreen from './screens/TransactionsScreen';
 import SettingsScreen from './screens/SettingsScreen';
+import OnboardingScreen from './screens/OnboardingScreen';
 import SplashScreen from './screens/SplashScreen';
+import SecurityCodeScreen from './screens/SecurityCodeScreen';
+import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
+import PasswordChangedSuccessScreen from './screens/PasswordChangedSuccessScreen';
+import FaceIdSetupScreen from './screens/FaceIdSetupScreen';
 import { initializeDatabase, addNote, getNotes } from './lib/db';
 
 const Stack = createNativeStackNavigator();
@@ -36,7 +42,13 @@ export default function App() {
           component={SplashScreen}
           options={{ headerShown: false }}
         />
-        <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="SecurityCode" component={SecurityCodeScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="PasswordChangedSuccess" component={PasswordChangedSuccessScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="FaceIdSetup" component={FaceIdSetupScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Home" component={ModernHomeScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="HomeOld" component={HomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Details" component={DetailsScreen} />
         <Stack.Screen name="Transactions" component={TransactionsScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
