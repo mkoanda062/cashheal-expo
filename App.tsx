@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, SafeAreaView, Button, FlatList } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import HomeScreen from './screens/HomeScreen';
 import ModernHomeScreen from './screens/ModernHomeScreen';
 import DetailsScreen from './screens/DetailsScreen';
 import TransactionsScreen from './screens/TransactionsScreen';
@@ -48,7 +47,6 @@ export default function App() {
         <Stack.Screen name="PasswordChangedSuccess" component={PasswordChangedSuccessScreen} options={{ headerShown: false }} />
         <Stack.Screen name="FaceIdSetup" component={FaceIdSetupScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Home" component={ModernHomeScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="HomeOld" component={HomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Details" component={DetailsScreen} />
         <Stack.Screen name="Transactions" component={TransactionsScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />

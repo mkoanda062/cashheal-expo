@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Alert,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
@@ -8,540 +10,598 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  ToastAndroid,
   TouchableOpacity,
   View,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Circle, Line, Path, Polygon, Polyline } from 'react-native-svg';
+import { Category, getCategories } from '../lib/db';
 
-import {
-  addTransaction,
-  getBalance,
-  getCategories,
-  getTransactions,
-  setBalance as setBalanceDB,
-  updateCategoryAmount,
-  Balance,
-  Category,
-  Transaction,
-} from '../lib/db';
+type Currency = 'USD' | 'EUR' | 'GBP' | 'CAD' | 'XAF' | 'XOF';
+type PeriodKey = 'day' | '2weeks' | 'month';
 
-type RangeKey = 'day' | 'two_weeks' | 'month';
-
-const RANGE_CONFIG: Record<RangeKey, { label: string; days: number }> = {
-  day: { label: 'Jour', days: 1 },
-  two_weeks: { label: '2 semaines', days: 14 },
-  month: { label: 'Mois', days: 30 },
+type PeriodPreset = {
+  spent: number;
+  budget: number;
+  average: number;
+  prediction: number;
+  predictionMessage: string;
 };
 
-const BUDGET_STORAGE_KEY = 'cashheal/budgetTargets';
-const CURRENCY_STORAGE_KEY = 'currency';
+type PeriodDataMap = Record<PeriodKey, PeriodPreset>;
 
-interface CategorySummary {
-  key: string;
-  label: string;
-  emoji: string;
-  color: string;
-  total: number;
-}
+const BASE_PERIOD_PRESETS: Record<PeriodKey, PeriodPreset> = {
+  day: {
+    spent: 24.25,
+    budget: 50,
+    average: 178.34,
+    prediction: 40.0,
+    predictionMessage: 'Tu as dépensé 10 $ de moins que prévu continue comme ça.',
+  },
+  '2weeks': {
+    spent: 210.75,
+    budget: 350,
+    average: 420.2,
+    prediction: 512.55,
+    predictionMessage: 'Tu es sur la bonne voie pour rester sous le budget.',
+  },
+  month: {
+    spent: 845.3,
+    budget: 1500,
+    average: 1210.45,
+    prediction: 1625.1,
+    predictionMessage: 'Tu devrais économiser 80 $ supplémentaires ce mois-ci.',
+  },
+};
+
+const CATEGORY_ORDER = ['food', 'shopping', 'leisure'] as const;
+
+const CATEGORY_FALLBACKS: Record<
+  (typeof CATEGORY_ORDER)[number],
+  { label: string; amount: number; color: string }
+> = {
+  food: { label: 'Nourriture', amount: 65.15, color: '#FB9F3C' },
+  shopping: { label: 'Shopping', amount: 35.25, color: '#11C689' },
+  leisure: { label: 'Loisirs', amount: 17.97, color: '#7B61FF' },
+};
+
+const FoodIcon = () => (
+  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M7 3V11"
+      stroke="#FFFFFF"
+      strokeWidth={2}
+      strokeLinecap="round"
+    />
+    <Path
+      d="M11 3V11"
+      stroke="#FFFFFF"
+      strokeWidth={2}
+      strokeLinecap="round"
+    />
+    <Path
+      d="M7 11C7 14 5 16 5 19"
+      stroke="#FFFFFF"
+      strokeWidth={2}
+      strokeLinecap="round"
+    />
+    <Path
+      d="M11 11C11 14 9 16 9 19"
+      stroke="#FFFFFF"
+      strokeWidth={2}
+      strokeLinecap="round"
+    />
+    <Path
+      d="M16 3V10"
+      stroke="#FFFFFF"
+      strokeWidth={2}
+      strokeLinecap="round"
+    />
+    <Path
+      d="M16 10C16 12 18 13 18 15V19"
+      stroke="#FFFFFF"
+      strokeWidth={2}
+      strokeLinecap="round"
+    />
+  </Svg>
+);
+
+const ShoppingIcon = () => (
+  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M6 8H18L19.2 19H4.8L6 8Z"
+      stroke="#FFFFFF"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Path
+      d="M9 8V6C9 4.343 10.343 3 12 3C13.657 3 15 4.343 15 6V8"
+      stroke="#FFFFFF"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+const LeisureIcon = () => (
+  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M7 10H17C19.209 10 21 11.791 21 14C21 16.209 19.209 18 17 18H16L14 16H10L8 18H7C4.791 18 3 16.209 3 14C3 11.791 4.791 10 7 10Z"
+      stroke="#FFFFFF"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Circle cx={8.5} cy={13.5} r={0.8} fill="#FFFFFF" />
+    <Circle cx={15.5} cy={13.5} r={0.8} fill="#FFFFFF" />
+  </Svg>
+);
+
+const CATEGORY_ICONS: Record<(typeof CATEGORY_ORDER)[number], () => JSX.Element> = {
+  food: FoodIcon,
+  shopping: ShoppingIcon,
+  leisure: LeisureIcon,
+};
 
 export default function ModernHomeScreen() {
-  const [balance, setBalance] = useState<Balance>({ total: 0, current: 0 });
   const [categories, setCategories] = useState<Category[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [selectedRange, setSelectedRange] = useState<RangeKey>('day');
-  const [loading, setLoading] = useState(false);
+  const [currency, setCurrency] = useState<Currency>('USD');
+  const [period, setPeriod] = useState<PeriodKey>('day');
+  const [periodDataMap, setPeriodDataMap] = useState<PeriodDataMap>(() => ({
+    day: { ...BASE_PERIOD_PRESETS.day },
+    '2weeks': { ...BASE_PERIOD_PRESETS['2weeks'] },
+    month: { ...BASE_PERIOD_PRESETS.month },
+  }));
+  const [expenseModalVisible, setExpenseModalVisible] = useState(false);
+  const [modalMode, setModalMode] = useState<'add' | 'remove'>('add');
+  const [modalAmount, setModalAmount] = useState('');
 
-  const [currency, setCurrency] = useState<'USD' | 'EUR' | 'GBP' | 'CAD' | 'XAF' | 'XOF'>('EUR');
-  const [budgetTargets, setBudgetTargets] = useState<Record<RangeKey, number>>({
-    day: 60,
-    two_weeks: 400,
-    month: 900,
-  });
+  const insets = useSafeAreaInsets();
 
-  const [modalType, setModalType] = useState<'income' | 'expense' | 'budget' | null>(null);
-  const [amountInput, setAmountInput] = useState('');
-  const [selectedCategoryKey, setSelectedCategoryKey] = useState<string | null>(null);
-  const [budgetInput, setBudgetInput] = useState('');
+  useEffect(() => {
+    (async () => {
+      try {
+        const savedCurrency = await AsyncStorage.getItem('currency');
+        if (
+          savedCurrency === 'USD' ||
+          savedCurrency === 'EUR' ||
+          savedCurrency === 'GBP' ||
+          savedCurrency === 'CAD' ||
+          savedCurrency === 'XAF' ||
+          savedCurrency === 'XOF'
+        ) {
+          setCurrency(savedCurrency);
+        }
+
+        const loadedCategories = await getCategories();
+        setCategories(loadedCategories);
+      } catch (error) {
+        console.error('Erreur lors du chargement des données', error);
+      }
+    })();
+  }, []);
 
   const formatAmount = useCallback(
-    (value: number) => {
-      const locale =
-        currency === 'USD'
-          ? 'en-US'
-          : currency === 'EUR'
-          ? 'fr-FR'
-          : currency === 'GBP'
-          ? 'en-GB'
-          : currency === 'CAD'
-          ? 'en-CA'
-          : currency === 'XAF'
-          ? 'fr-CM'
-          : 'fr-SN';
-
-      return new Intl.NumberFormat(locale, {
-        style: 'currency',
-        currency,
-        minimumFractionDigits: 2,
-      }).format(value || 0);
+    (value: number, fractionalDigits: number = 2) => {
+    const currencyToLocale: Record<Currency, string> = {
+      USD: 'en-US',
+      EUR: 'fr-FR',
+      GBP: 'en-GB',
+      CAD: 'en-CA',
+      XAF: 'fr-CM',
+      XOF: 'fr-SN',
+    };
+    return new Intl.NumberFormat(currencyToLocale[currency], {
+      style: 'currency',
+      currency,
+        minimumFractionDigits: fractionalDigits,
+        maximumFractionDigits: fractionalDigits,
+      }).format(value);
     },
     [currency],
   );
 
-  const loadBudgetsFromStorage = useCallback(async () => {
-    try {
-      const raw = await AsyncStorage.getItem(BUDGET_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Record<RangeKey, number>;
-        setBudgetTargets((prev) => ({ ...prev, ...parsed }));
-      }
-    } catch (error) {
-      console.warn('Impossible de charger les budgets:', error);
+  const showToast = (message: string) => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.SHORT);
+    } else {
+      Alert.alert('Info', message);
     }
-  }, []);
+  };
 
-  const loadCurrency = useCallback(async () => {
-    try {
-      const saved = await AsyncStorage.getItem(CURRENCY_STORAGE_KEY);
-      if (
-        saved === 'USD' ||
-        saved === 'EUR' ||
-        saved === 'GBP' ||
-        saved === 'CAD' ||
-        saved === 'XAF' ||
-        saved === 'XOF'
-      ) {
-        setCurrency(saved);
-      }
-    } catch (error) {
-      console.warn('Impossible de charger la devise:', error);
+  const parseMoneyInput = (value: string) =>
+    parseFloat(value.replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0;
+
+  const openExpenseModal = (mode: 'add' | 'remove') => {
+    setModalMode(mode);
+    setModalAmount('');
+    setExpenseModalVisible(true);
+  };
+
+  const handleModalConfirm = () => {
+    const amount = parseMoneyInput(modalAmount);
+    if (!amount) {
+      showToast('Entre un montant valide.');
+      return;
     }
-  }, []);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const now = Date.now();
-      const days = RANGE_CONFIG[selectedRange].days;
-      const from = now - days * 24 * 60 * 60 * 1000;
+    const delta = modalMode === 'add' ? amount : -amount;
 
-      const [b, cats, txs] = await Promise.all([
-        getBalance(),
-        getCategories(),
-        getTransactions({ from }),
-      ]);
-
-      setBalance(b);
-      setCategories(cats);
-      setTransactions(txs);
-    } catch (error) {
-      console.error('Erreur pendant le chargement:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedRange]);
-
-  useEffect(() => {
-    loadCurrency();
-    loadBudgetsFromStorage();
-  }, [loadBudgetsFromStorage, loadCurrency]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  const expensesTotal = useMemo(() => {
-    return transactions
-      .filter((tx) => tx.type === 'expense')
-      .reduce((sum, tx) => sum + tx.amount, 0);
-  }, [transactions]);
-
-  const incomesTotal = useMemo(() => {
-    return transactions
-      .filter((tx) => tx.type === 'income')
-      .reduce((sum, tx) => sum + tx.amount, 0);
-  }, [transactions]);
-
-  const categoryBreakdown: CategorySummary[] = useMemo(() => {
-    const map = new Map<string, CategorySummary>();
-    const categoryMap = new Map(categories.map((c) => [c.key, c]));
-
-    transactions.forEach((tx) => {
-      if (tx.type !== 'expense' || !tx.categoryKey) {
-        return;
-      }
-      const meta = categoryMap.get(tx.categoryKey);
-      if (!meta) return;
-
-      if (!map.has(tx.categoryKey)) {
-        map.set(tx.categoryKey, {
-          key: tx.categoryKey,
-          label: meta.label,
-          emoji: meta.emoji,
-          color: meta.color,
-          total: 0,
-        });
-      }
-      const entry = map.get(tx.categoryKey)!;
-      entry.total += tx.amount;
+    setPeriodDataMap((prev) => {
+      const current = prev[period];
+      const updated: PeriodPreset = {
+        ...current,
+        spent: Math.max(0, current.spent + delta),
+        average: Math.max(0, current.average + delta / 7),
+        prediction: Math.max(0, current.prediction + delta * 1.1),
+      };
+      return {
+        ...prev,
+        [period]: updated,
+      };
     });
 
-    return Array.from(map.values()).sort((a, b) => b.total - a.total);
-  }, [transactions, categories]);
-
-  const budgetTarget = budgetTargets[selectedRange] || 0;
-  const remainingBudget = budgetTarget - expensesTotal;
-  const progress = budgetTarget > 0 ? Math.min(expensesTotal / budgetTarget, 1) : 0;
-  const averagePerDay = expensesTotal / RANGE_CONFIG[selectedRange].days;
-
-  const lastTransactions = useMemo(() => transactions.slice(0, 5), [transactions]);
-
-  const closeModal = () => {
-    setModalType(null);
-    setAmountInput('');
-    setSelectedCategoryKey(null);
-    setBudgetInput('');
+    setExpenseModalVisible(false);
+    setModalAmount('');
+    showToast(modalMode === 'add' ? 'Dépense ajoutée.' : 'Dépense annulée.');
   };
 
-  const submitTransaction = async () => {
-    const raw = parseFloat(amountInput.replace(/[^0-9.,-]/g, '').replace(',', '.'));
-    const value = isNaN(raw) ? 0 : Math.abs(raw);
-    if (!value) {
-      Alert.alert('Montant requis', 'Entre un montant valide.');
-      return;
-    }
+  const periodData = periodDataMap[period];
+  const remainingBudget = Math.max(periodData.budget - periodData.spent, 0);
+  const progressRatio = Math.min(periodData.spent / Math.max(periodData.budget, 1), 1);
 
-    try {
-      if (modalType === 'income') {
-        const newTotal = balance.total + value;
-        const newCurrent = balance.current + value;
-        await setBalanceDB(newTotal, newCurrent);
-        await addTransaction('income', value, null);
-      } else if (modalType === 'expense') {
-        if (!selectedCategoryKey) {
-          Alert.alert('Catégorie requise', 'Choisis une catégorie pour cette dépense.');
-          return;
-        }
-        if (balance.current < value) {
-          Alert.alert('Attention', "Ton solde actuel n'est pas suffisant.");
-        }
-        await updateCategoryAmount(selectedCategoryKey, value);
-        const newCurrent = Math.max(0, balance.current - value);
-        await setBalanceDB(balance.total, newCurrent);
-        await addTransaction('expense', value, selectedCategoryKey);
+  const categorySegments = useMemo(
+    () =>
+      CATEGORY_ORDER.map((key) => {
+        const source = categories.find((category) => category.key === key);
+        const fallback = CATEGORY_FALLBACKS[key];
+        const amount = source ? Number(source.amount) || 0 : fallback.amount;
+        return {
+          key,
+          label: fallback.label,
+          amount,
+          color: fallback.color,
+        };
+      }),
+    [categories],
+  );
+
+  const donutOrder: (typeof CATEGORY_ORDER)[number][] = ['food', 'leisure', 'shopping'];
+
+  const donutSegments = useMemo(
+    () =>
+      donutOrder
+        .map((key) => categorySegments.find((segment) => segment.key === key))
+        .filter((segment): segment is (typeof categorySegments)[number] => Boolean(segment)),
+    [categorySegments],
+  );
+
+  const totalChartAmount = donutSegments.reduce((sum, item) => sum + item.amount, 0) || 1;
+
+  const handlePeriodSelect = (value: PeriodKey) => {
+    setPeriod(value);
+  };
+
+  const renderCategoryIcon = (key: (typeof CATEGORY_ORDER)[number]) => {
+    const IconComponent = CATEGORY_ICONS[key];
+    return <IconComponent />;
+  };
+
+const DonutChart = () => {
+  const size = 170;
+  const center = size / 2;
+  const outerRadius = 70;
+  const innerRadius = 44;
+  const gapAngle = 4;
+  let currentAngle = -90;
+
+  const toRadians = (angle: number) => (angle * Math.PI) / 180;
+  const polarToCartesian = (radius: number, angle: number) => {
+    const radians = toRadians(angle);
+    return {
+      x: center + radius * Math.cos(radians),
+      y: center + radius * Math.sin(radians),
+    };
+  };
+
+    const segments = donutSegments.map((segment) => {
+      const ratio = totalChartAmount === 0 ? 0 : segment.amount / totalChartAmount;
+      if (ratio <= 0) {
+        return null;
       }
 
-      await loadData();
-      closeModal();
-    } catch (error) {
-      console.error('Erreur lors de la transaction:', error);
-      Alert.alert('Erreur', "Impossible d'enregistrer la transaction.");
-    }
-  };
+      const sweep = ratio * 360;
+      const safeSweep = Math.max(1, sweep - gapAngle);
+      const sweepReduction = sweep - safeSweep;
+      const startAngle = currentAngle + sweepReduction / 2;
+      const endAngle = startAngle + safeSweep;
+      currentAngle += sweep;
 
-  const submitBudget = async () => {
-    const raw = parseFloat(budgetInput.replace(/[^0-9.,-]/g, '').replace(',', '.'));
-    const value = isNaN(raw) ? 0 : Math.max(0, raw);
-    if (!value) {
-      Alert.alert('Montant requis', 'Entre un budget valide.');
-      return;
-    }
-    const next = { ...budgetTargets, [selectedRange]: value };
-    setBudgetTargets(next);
-    try {
-      await AsyncStorage.setItem(BUDGET_STORAGE_KEY, JSON.stringify(next));
-    } catch (error) {
-      console.warn('Impossible de sauvegarder le budget:', error);
-    }
-    closeModal();
+      const outerStart = polarToCartesian(outerRadius, startAngle);
+      const outerEnd = polarToCartesian(outerRadius, endAngle);
+      const innerEnd = polarToCartesian(innerRadius, endAngle);
+      const innerStart = polarToCartesian(innerRadius, startAngle);
+      const largeArcFlag = safeSweep > 180 ? 1 : 0;
+
+      const pathData = [
+        `M ${outerStart.x} ${outerStart.y}`,
+        `A ${outerRadius} ${outerRadius} 0 ${largeArcFlag} 1 ${outerEnd.x} ${outerEnd.y}`,
+        `L ${innerEnd.x} ${innerEnd.y}`,
+        `A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 0 ${innerStart.x} ${innerStart.y}`,
+        'Z',
+      ].join(' ');
+
+      return <Path key={segment.key} d={pathData} fill={segment.color} />;
+    });
+
+    return (
+      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <Circle cx={center} cy={center} r={outerRadius} fill="#E1F5EB" />
+        {segments}
+        <Circle cx={center} cy={center} r={innerRadius - 2} fill="#F7FFFA" />
+      </Svg>
+    );
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['left', 'right']}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F1FFF3" />
-      <View style={styles.container}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.subtitle}>Bienvenue 👋</Text>
-              <Text style={styles.title}>Ton tableau de bord CashHeal</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.currencySelector}
-              onPress={async () => {
-                const order: typeof currency[] = ['EUR', 'USD', 'GBP', 'CAD', 'XAF', 'XOF'];
-                const nextIndex = (order.indexOf(currency) + 1) % order.length;
-                const nextCurrency = order[nextIndex];
-                setCurrency(nextCurrency);
-                await AsyncStorage.setItem(CURRENCY_STORAGE_KEY, nextCurrency);
-              }}
-            >
-              <Text style={styles.currencySelectorText}>{currency}</Text>
-            </TouchableOpacity>
-          </View>
-
-          {loading && (
-            <View style={styles.loadingBanner}>
-              <Text style={styles.loadingText}>Mise à jour des données…</Text>
-            </View>
-          )}
-
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Tu as dépensé {RANGE_CONFIG[selectedRange].label}</Text>
-            <Text style={styles.summaryAmount}>{formatAmount(expensesTotal)}</Text>
-
-            <View style={styles.progressHeader}>
-              <Text style={styles.progressLabel}>Budget cible</Text>
-              <Text style={styles.progressLabel}>{formatAmount(budgetTarget)}</Text>
-            </View>
-
-            <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
-            </View>
-
-            <View style={styles.summaryFooter}>
-              <Text style={styles.summaryFooterText}>
-                Il te reste{' '}
-                <Text style={{ fontWeight: '700', color: remainingBudget >= 0 ? '#15803D' : '#B91C1C' }}>
-                  {formatAmount(remainingBudget)}
-                </Text>
-              </Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setModalType('budget');
-                  setBudgetInput(String(budgetTarget));
-                }}
-              >
-                <Text style={styles.editBudget}>Modifier le budget</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.rangeSelector}>
-            {(Object.keys(RANGE_CONFIG) as RangeKey[]).map((key) => (
-              <TouchableOpacity
-                key={key}
-                style={[
-                  styles.rangeButton,
-                  selectedRange === key && styles.rangeButtonActive,
-                ]}
-                onPress={() => setSelectedRange(key)}
-              >
-                <Text
-                  style={[
-                    styles.rangeButtonText,
-                    selectedRange === key && styles.rangeButtonTextActive,
-                  ]}
-                >
-                  {RANGE_CONFIG[key].label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <View style={styles.insightsRow}>
-            <View style={styles.insightCard}>
-              <Text style={styles.insightLabel}>Moyenne / jour</Text>
-              <Text style={styles.insightValue}>{formatAmount(averagePerDay)}</Text>
-              <Text style={styles.insightHint}>
-                Basé sur {transactions.filter((t) => t.type === 'expense').length} dépenses
-              </Text>
-            </View>
-            <View style={styles.insightCard}>
-              <Text style={styles.insightLabel}>Revenus enregistrés</Text>
-              <Text style={styles.insightValue}>{formatAmount(incomesTotal)}</Text>
-              <Text style={styles.insightHint}>
-                Solde actuel: {formatAmount(balance.current)}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.actionsRow}>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.incomeButton]}
-              onPress={() => setModalType('income')}
-            >
-              <Text style={styles.actionEmoji}>💰</Text>
-              <Text style={styles.actionText}>Ajouter un revenu</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.expenseButton]}
-              onPress={() => setModalType('expense')}
-            >
-              <Text style={styles.actionEmoji}>🧾</Text>
-              <Text style={styles.actionText}>Ajouter une dépense</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Tableau de bord</Text>
-            {categoryBreakdown.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyStateText}>
-                  Aucune dépense sur cette période. Ajoute une dépense pour commencer à suivre tes catégories.
-                </Text>
-              </View>
-            ) : (
-              categoryBreakdown.map((item) => {
-                const ratio = expensesTotal > 0 ? item.total / expensesTotal : 0;
-                return (
-                  <View key={item.key} style={styles.categoryRow}>
-                    <View style={[styles.categoryIcon, { backgroundColor: item.color }]}>
-                      <Text style={styles.categoryEmoji}>{item.emoji}</Text>
-                    </View>
-                    <View style={styles.categoryInfo}>
-                      <View style={styles.categoryHeader}>
-                        <Text style={styles.categoryLabel}>{item.label}</Text>
-                        <Text style={styles.categoryAmount}>{formatAmount(item.total)}</Text>
-                      </View>
-                      <View style={styles.categoryProgress}>
-                        <View style={[styles.categoryProgressFill, { width: `${ratio * 100}%` }]} />
-                      </View>
-                    </View>
-                  </View>
-                );
-              })
-            )}
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Transactions récentes</Text>
-            {lastTransactions.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyStateText}>Pas de transactions sur cette période.</Text>
-              </View>
-            ) : (
-              lastTransactions.map((tx) => {
-                const isExpense = tx.type === 'expense';
-                const categoryMeta = categories.find((c) => c.key === tx.categoryKey);
-                const formattedDate = new Date(tx.createdAt).toLocaleString('fr-FR', {
-                  day: '2-digit',
-                  month: 'short',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                });
-                return (
-                  <View key={tx.id} style={styles.transactionRow}>
-                    <View style={[styles.transactionIcon, isExpense ? styles.expenseBg : styles.incomeBg]}>
-                      <Text style={styles.transactionEmoji}>
-                        {categoryMeta?.emoji ?? (isExpense ? '🧾' : '💰')}
-                      </Text>
-                    </View>
-                    <View style={styles.transactionInfo}>
-                      <Text style={styles.transactionTitle}>
-                        {isExpense
-                          ? categoryMeta?.label ?? 'Dépense'
-                          : 'Revenu'}
-                      </Text>
-                      <Text style={styles.transactionSubtitle}>{formattedDate}</Text>
-                    </View>
-                    <Text style={[styles.transactionAmount, isExpense ? styles.expenseText : styles.incomeText]}>
-                      {isExpense ? '-' : '+'}
-                      {formatAmount(tx.amount)}
-                    </Text>
-                  </View>
-                );
-              })
-            )}
-          </View>
-
-          <View style={styles.bottomSummary}>
-            <View>
-              <Text style={styles.bottomLabel}>Solde total</Text>
-              <Text style={styles.bottomValue}>{formatAmount(balance.total)}</Text>
-            </View>
-            <View>
-              <Text style={styles.bottomLabel}>Solde actuel</Text>
-              <Text style={styles.bottomValue}>{formatAmount(balance.current)}</Text>
-            </View>
-          </View>
-        </ScrollView>
-      </View>
-
-      <Modal
-        visible={modalType === 'income' || modalType === 'expense'}
-        transparent
-        animationType="slide"
-        onRequestClose={closeModal}
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <StatusBar style="light" backgroundColor="#0AB17A" />
+      <View style={styles.wrapper}>
+        <LinearGradient
+          colors={['#0AB17A', '#0AB17A']}
+          style={styles.headerGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+      <KeyboardAvoidingView
+          style={styles.scrollArea}
+        behavior={Platform.select({ ios: 'padding', android: undefined })}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              {modalType === 'income' ? 'Ajouter un revenu' : 'Ajouter une dépense'}
-            </Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Montant"
-              placeholderTextColor="#9ca3af"
-              keyboardType="decimal-pad"
-              value={amountInput}
-              onChangeText={setAmountInput}
-              autoFocus
-            />
+        <ScrollView
+            contentContainerStyle={[
+            styles.scrollContent,
+            { paddingTop: 24 + insets.top, paddingBottom: 10 + Math.max(insets.bottom, 0) },
+            ]}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.headerContent}>
+              <View>
+                <Text style={styles.welcomeHeading}>Bienvenue !</Text>
+                <Text style={styles.greetingText}>Bonjour 👋</Text>
+                <Text style={styles.welcomeText}>Prêt à soigner vos finances ?</Text>
+              </View>
+              <TouchableOpacity activeOpacity={0.8} style={styles.notificationButton}>
+                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                  <Path
+                    d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2Z"
+                    fill="#ffffff"
+                  />
+                  <Path
+                    d="M21 19V20H3V19L5 17V11C5 7.9 7.03 5.17 10 4.29C10.38 4.15 10.79 4.06 11.22 4.03C11.65 4.06 12.06 4.15 12.44 4.29C15.41 5.17 17.44 7.9 17.44 11V17L19.44 19H21Z"
+                    fill="#ffffff"
+                  />
+                  <Path d="M10 20C10 21.1 10.9 22 12 22C13.1 22 14 21.1 14 20" fill="#ffffff" />
+                </Svg>
+              </TouchableOpacity>
+            </View>
 
-            {modalType === 'expense' && (
-              <View style={styles.modalCategories}>
-                <Text style={styles.modalLabel}>Catégorie</Text>
-                <View style={styles.modalCategoryList}>
-                  {categories.map((cat) => (
-                    <TouchableOpacity
-                      key={cat.key}
-                      style={[
-                        styles.modalCategoryChip,
-                        selectedCategoryKey === cat.key && styles.modalCategoryChipActive,
-                      ]}
-                      onPress={() => setSelectedCategoryKey(cat.key)}
+            <View style={styles.contentSurface}>
+              <View style={styles.summaryCard}>
+                <Text style={styles.summarySubtitle}>Tu As Dépensé Aujourd'hui</Text>
+                <View style={styles.amountRow}>
+                  <Text style={styles.summaryAmount}>{formatAmount(periodData.spent)}</Text>
+                  <View style={styles.amountActions}>
+                <TouchableOpacity
+                      style={[styles.actionButton, styles.addButton]}
+                      activeOpacity={0.9}
+                      onPress={() => openExpenseModal('add')}
                     >
-                      <Text style={styles.modalCategoryText}>
-                        {cat.emoji} {cat.label}
-                      </Text>
+                      <Text style={styles.actionButtonText}>+</Text>
                     </TouchableOpacity>
-                  ))}
+                    <TouchableOpacity
+                      style={[styles.actionButton, styles.removeButton]}
+                      activeOpacity={0.9}
+                      onPress={() => openExpenseModal('remove')}
+                    >
+                      <Text style={styles.actionButtonText}>-</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <View style={styles.budgetCard}>
+                  <View style={styles.budgetHeader}>
+                    <Text style={styles.budgetLabel}>Budget du jour</Text>
+                    <Text style={styles.budgetAmount}>{formatAmount(periodData.budget)}</Text>
+                  </View>
+                  <View style={styles.progressTrack}>
+                    <View style={[styles.progressFill, { width: `${Math.max(progressRatio * 100, 6)}%` }]} />
+                  </View>
+                  <Text style={styles.budgetRemainingText}>
+                    Il te reste <Text style={styles.highlightedText}>{formatAmount(remainingBudget)}</Text> pour aujourd'hui.
+                  </Text>
+                </View>
+
+                <View style={styles.periodSwitch}>
+                  <TouchableOpacity
+                    style={[styles.periodButton, period === 'day' && styles.periodButtonActive]}
+                    onPress={() => handlePeriodSelect('day')}
+                    activeOpacity={0.9}
+                  >
+                    <Text style={[styles.periodButtonText, period === 'day' && styles.periodButtonTextActive]}>Jour</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.periodButton, period === '2weeks' && styles.periodButtonActive]}
+                    onPress={() => handlePeriodSelect('2weeks')}
+                    activeOpacity={0.9}
+                  >
+                    <Text style={[styles.periodButtonText, period === '2weeks' && styles.periodButtonTextActive]}>2 semaines</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.periodButton, period === 'month' && styles.periodButtonActive]}
+                    onPress={() => handlePeriodSelect('month')}
+                    activeOpacity={0.9}
+                  >
+                    <Text style={[styles.periodButtonText, period === 'month' && styles.periodButtonTextActive]}>Mois</Text>
+                </TouchableOpacity>
                 </View>
               </View>
-            )}
 
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalSecondary} onPress={closeModal}>
-                <Text style={styles.modalSecondaryText}>Annuler</Text>
+              <View style={styles.statsRow}>
+                <View style={styles.statCard}>
+                  <Text style={styles.statTitle}>Moyenne cette semaine</Text>
+                  <Text style={styles.statValue}>{formatAmount(periodData.average)}</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={styles.statTitle}>Prédiction</Text>
+                  <View style={styles.predictionRow}>
+                    <Svg width={36} height={36} viewBox="0 0 36 36">
+                      <Circle cx={18} cy={18} r={18} fill="#E8F9F0" />
+                      <Circle cx={18} cy={18} r={14} fill="#0FCF9E" />
+                      <Circle cx={14} cy={15} r={2} fill="#0A5C47" />
+                      <Circle cx={22} cy={15} r={2} fill="#0A5C47" />
+                      <Path
+                        d="M12 22C13.5 24 15.5 25 18 25C20.5 25 22.5 24 24 22"
+                        stroke="#0A5C47"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </Svg>
+                    <Text style={styles.predictionText}>{periodData.predictionMessage}</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.dashboardSection}>
+                <Text style={styles.dashboardTitle}>Tableau De Bord</Text>
+                <View style={styles.dashboardContent}>
+                  <DonutChart />
+                  <View style={styles.dashboardCategories}>
+                    {categorySegments.map((segment) => (
+                      <View key={segment.key} style={styles.dashboardCategoryCard}>
+                        <View style={[styles.dashboardCategoryIcon, styles[`dashboardCategoryIcon_${segment.key}`]]}>
+                          {renderCategoryIcon(segment.key)}
+                </View>
+                <View>
+                          <Text style={styles.dashboardCategoryLabel}>{segment.label}</Text>
+                          <Text style={styles.dashboardCategoryAmount}>{formatAmount(segment.amount)}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+
+        <View
+          style={[
+            styles.bottomNavigationContainer,
+            { paddingBottom: insets.bottom > 0 ? insets.bottom : 12 },
+          ]}
+        >
+          <View style={styles.bottomNavigation}>
+            <TouchableOpacity style={[styles.navItem, styles.navItemActive]} activeOpacity={0.8}>
+              <View style={[styles.navIconWrapper, styles.navIconWrapperActive]}>
+                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                  <Path
+                    d="M3 9L12 2L21 9V20C21 20.55 20.55 21 20 21H4C3.45 21 3 20.55 3 20V9Z"
+                    stroke="#ffffff"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <Path
+                    d="M9 21V13H15V21"
+                    stroke="#ffffff"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Svg>
+            </View>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.navItem} activeOpacity={0.8}>
+              <View style={styles.navIconWrapper}>
+                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                  <Line x1={6} y1={10} x2={6} y2={20} stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" />
+                  <Line x1={12} y1={4} x2={12} y2={20} stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" />
+                  <Line x1={18} y1={14} x2={18} y2={20} stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" />
+                </Svg>
+            </View>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.navItem} activeOpacity={0.8}>
+              <View style={styles.navIconWrapper}>
+                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                  <Polyline points="17,2 21,6 17,10" stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                  <Path d="M3 6H21" stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                  <Polyline points="7,22 3,18 7,14" stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                  <Path d="M21 18H3" stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+          </View>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalPrimary} onPress={submitTransaction}>
-                <Text style={styles.modalPrimaryText}>Enregistrer</Text>
+            <TouchableOpacity style={styles.navItem} activeOpacity={0.8}>
+              <View style={styles.navIconWrapper}>
+                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                  <Polygon points="12 2 2 7 12 12 22 7" stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                  <Polyline points="2 12 12 17 22 12" stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                  <Polyline points="2 17 12 22 22 17" stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+              </View>
               </TouchableOpacity>
+            <TouchableOpacity style={styles.navItem} activeOpacity={0.8}>
+              <View style={styles.navIconWrapper}>
+                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                  <Circle cx={12} cy={7} r={4} stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                  <Path d="M20 21V19C20 16.7909 18.2091 15 16 15H8C5.79086 15 4 16.7909 4 19V21" stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+              </View>
+              </TouchableOpacity>
+          </View>
             </View>
           </View>
-        </View>
-      </Modal>
 
-      <Modal
-        visible={modalType === 'budget'}
-        transparent
-        animationType="fade"
-        onRequestClose={closeModal}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Budget {RANGE_CONFIG[selectedRange].label}</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Budget cible"
-              placeholderTextColor="#9ca3af"
-              keyboardType="decimal-pad"
-              value={budgetInput}
-              onChangeText={setBudgetInput}
-              autoFocus
-            />
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalSecondary} onPress={closeModal}>
-                <Text style={styles.modalSecondaryText}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalPrimary} onPress={submitBudget}>
-                <Text style={styles.modalPrimaryText}>Sauvegarder</Text>
+      <Modal visible={expenseModalVisible} transparent animationType="fade" onRequestClose={() => setExpenseModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.select({ ios: 'padding', android: undefined })}
+            style={styles.modalContainer}
+          >
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>
+                {modalMode === 'add' ? 'Ajouter une dépense' : 'Annuler une dépense'}
+              </Text>
+              <TextInput
+                style={styles.modalInput}
+                value={modalAmount}
+                onChangeText={setModalAmount}
+                keyboardType="numeric"
+                placeholder="Montant"
+                placeholderTextColor="#95A5A6"
+              />
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalCancelButton]}
+                  onPress={() => setExpenseModalVisible(false)}
+                >
+                  <Text style={styles.modalCancelText}>Fermer</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalConfirmButton]}
+                  onPress={handleModalConfirm}
+                  activeOpacity={0.9}
+                >
+                  <Text style={styles.modalConfirmText}>Valider</Text>
               </TouchableOpacity>
             </View>
+            </View>
+          </KeyboardAvoidingView>
           </View>
-        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -550,426 +610,393 @@ export default function ModernHomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F1FFF3',
+    backgroundColor: '#0AB17A',
   },
-  container: {
+  wrapper: {
     flex: 1,
-    backgroundColor: '#F1FFF3',
+    backgroundColor: '#E6F6EE',
+  },
+  headerGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 320,
+    borderBottomLeftRadius: 42,
+    borderBottomRightRadius: 42,
+  },
+  scrollArea: {
+    flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 24,
+    paddingTop: 24,
+    paddingBottom: 160,
   },
-  header: {
+  headerContent: {
+    paddingHorizontal: 24,
+    marginTop: -12,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 12,
-    marginBottom: 24,
+    justifyContent: 'space-between',
   },
-  subtitle: {
-    fontSize: 14,
-    color: '#0E3E3E',
-    opacity: 0.7,
+  welcomeHeading: {
+    color: '#ffffff',
+    fontSize: 28,
+    fontWeight: '800',
   },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#0E3E3E',
+  greetingText: {
+    marginTop: 8,
+    color: '#ffffff',
+    fontSize: 16,
+  },
+  welcomeText: {
     marginTop: 4,
-  },
-  currencySelector: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: '#DFF7E2',
-  },
-  currencySelectorText: {
-    fontWeight: '700',
-    color: '#0E3E3E',
-  },
-  loadingBanner: {
-    backgroundColor: '#E3F8EE',
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    alignSelf: 'flex-start',
-    marginBottom: 16,
-  },
-  loadingText: {
-    fontSize: 13,
-    color: '#047857',
+    color: '#ffffff',
+    fontSize: 20,
     fontWeight: '600',
+  },
+  notificationButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  contentSurface: {
+    marginTop: -60,
+    paddingTop: 40,
+    paddingHorizontal: 24,
+    paddingBottom: 16,
+    backgroundColor: '#E6F6EE',
+    borderTopLeftRadius: 36,
+    borderTopRightRadius: 36,
+    shadowColor: '#0C7E5B',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 12 },
+    shadowRadius: 24,
+    elevation: 6,
   },
   summaryCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#0E3E3E',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
+    borderRadius: 28,
+    paddingVertical: 22,
+    paddingHorizontal: 24,
+    shadowColor: '#0C7E5B',
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 18,
+    elevation: 8,
   },
-  summaryTitle: {
+  summarySubtitle: {
     fontSize: 16,
-    color: '#0E3E3E',
-    opacity: 0.7,
+    color: '#0A5C47',
+    fontWeight: '500',
   },
-  summaryAmount: {
-    fontSize: 36,
-    fontWeight: '700',
-    color: '#0E3E3E',
-    marginTop: 4,
-  },
-  progressHeader: {
+  amountRow: {
+    marginTop: 6,
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  summaryAmount: {
+    fontSize: 34,
+    fontWeight: '700',
+    color: '#0047BE',
+  },
+  amountActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  actionButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addButton: {
+    backgroundColor: '#0FCF9E',
+  },
+  removeButton: {
+    backgroundColor: '#FF6B6B',
+  },
+  actionButtonText: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  budgetCard: {
     marginTop: 20,
+    backgroundColor: '#12C184',
+    borderRadius: 22,
+    padding: 18,
   },
-  progressLabel: {
-    fontSize: 13,
-    color: '#0E3E3E',
-    opacity: 0.7,
+  budgetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  progressBar: {
-    height: 12,
-    borderRadius: 999,
-    backgroundColor: '#DFF7E2',
+  budgetLabel: {
+    fontSize: 14,
+    color: '#F2FFFB',
+    fontWeight: '500',
+  },
+  budgetAmount: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#F2FFFB',
+  },
+  progressTrack: {
+    marginTop: 14,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: 'rgba(7,91,66,0.4)',
     overflow: 'hidden',
-    marginTop: 12,
   },
   progressFill: {
     height: '100%',
-    borderRadius: 999,
-    backgroundColor: '#00C897',
+    borderRadius: 5,
+    backgroundColor: '#FFFFFF',
   },
-  summaryFooter: {
+  budgetRemainingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#F2FFFB',
+  },
+  highlightedText: {
+    color: '#0047BE',
+    fontWeight: '600',
+  },
+  periodSwitch: {
+    flexDirection: 'row',
+    marginTop: 22,
+    backgroundColor: '#E6F6EE',
+    borderRadius: 18,
+    padding: 4,
+  },
+  periodButton: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  periodButtonActive: {
+    backgroundColor: '#13C88A',
+    shadowColor: '#13C88A',
+    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  periodButtonText: {
+    fontSize: 14,
+    color: '#0A5C47',
+    fontWeight: '500',
+  },
+  periodButtonTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    marginTop: 26,
+    gap: 14,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#F2FBF5',
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    shadowColor: '#0C7E5B',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 14,
+    elevation: 6,
+  },
+  statTitle: {
+    fontSize: 13,
+    color: '#0A5C47',
+    fontWeight: '600',
+  },
+  statValue: {
+    marginTop: 8,
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#0A5C47',
+  },
+  predictionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginTop: 10,
+  },
+  predictionText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#0A5C47',
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  dashboardSection: {
+    marginTop: 28,
+  },
+  dashboardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0A5C47',
+    marginBottom: 18,
+  },
+  dashboardContent: {
+    backgroundColor: '#F7FFFA',
+    borderRadius: 26,
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+    shadowColor: '#0C7E5B',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  dashboardCategories: {
+    flex: 1,
+    gap: 16,
+  },
+  dashboardCategoryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  dashboardCategoryIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dashboardCategoryIcon_leisure: {
+    backgroundColor: '#7B61FF',
+  },
+  dashboardCategoryIcon_food: {
+    backgroundColor: '#FB9F3C',
+  },
+  dashboardCategoryIcon_shopping: {
+    backgroundColor: '#11C689',
+  },
+  dashboardCategoryLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#0A5C47',
+  },
+  dashboardCategoryAmount: {
+    marginTop: 2,
+    fontSize: 14,
+    color: '#0A5C47',
+    fontWeight: '500',
+  },
+  bottomNavigationContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    backgroundColor: '#E6F6EE',
+  },
+  bottomNavigation: {
+    backgroundColor: '#D8F1E6',
+    borderRadius: 28,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 16,
+    shadowColor: '#0C7E5B',
+    shadowOpacity: 0.12,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 14,
+    elevation: 10,
   },
-  summaryFooterText: {
-    fontSize: 14,
-    color: '#0E3E3E',
-  },
-  editBudget: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#00C897',
-  },
-  rangeSelector: {
-    flexDirection: 'row',
-    backgroundColor: '#E3F8EE',
-    padding: 6,
-    borderRadius: 16,
-    marginBottom: 20,
-  },
-  rangeButton: {
+  navItem: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 12,
     alignItems: 'center',
   },
-  rangeButtonActive: {
-    backgroundColor: '#00C897',
+  navItemActive: {
+    transform: [{ translateY: -6 }],
   },
-  rangeButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#0E3E3E',
-  },
-  rangeButtonTextActive: {
-    color: '#FFFFFF',
-  },
-  insightsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
-  },
-  insightCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
-    shadowColor: '#0E3E3E',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
-  },
-  insightLabel: {
-    fontSize: 13,
-    color: '#0E3E3E',
-    opacity: 0.7,
-  },
-  insightValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#0E3E3E',
-    marginTop: 6,
-  },
-  insightHint: {
-    fontSize: 12,
-    color: '#0E3E3E',
-    opacity: 0.6,
-    marginTop: 4,
-    lineHeight: 16,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
-  },
-  actionButton: {
-    flex: 1,
-    borderRadius: 20,
-    paddingVertical: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  incomeButton: {
-    backgroundColor: '#DFF7E2',
-  },
-  expenseButton: {
-    backgroundColor: '#FEE4E2',
-  },
-  actionEmoji: {
-    fontSize: 24,
-    marginBottom: 6,
-  },
-  actionText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#0E3E3E',
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0E3E3E',
-    marginBottom: 16,
-  },
-  emptyState: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 20,
-    alignItems: 'center',
-  },
-  emptyStateText: {
-    fontSize: 14,
-    color: '#0E3E3E',
-    opacity: 0.7,
-    textAlign: 'center',
-  },
-  categoryRow: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 16,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  categoryIcon: {
+  navIconWrapper: {
     width: 48,
     height: 48,
-    borderRadius: 16,
-    alignItems: 'center',
+    borderRadius: 20,
+    backgroundColor: '#ECF8F1',
     justifyContent: 'center',
-    marginRight: 14,
+    alignItems: 'center',
   },
-  categoryEmoji: {
-    fontSize: 24,
+  navIconWrapperActive: {
+    backgroundColor: '#13C88A',
   },
-  categoryInfo: {
+  modalOverlay: {
     flex: 1,
-  },
-  categoryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  categoryLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#0E3E3E',
-  },
-  categoryAmount: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0E3E3E',
-  },
-  categoryProgress: {
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: '#E3F8EE',
-    overflow: 'hidden',
-  },
-  categoryProgressFill: {
-    height: '100%',
-    borderRadius: 999,
-    backgroundColor: '#00C897',
-  },
-  transactionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 12,
-  },
-  transactionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 16,
-    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'center',
-    marginRight: 14,
-  },
-  incomeBg: {
-    backgroundColor: '#DCFCE7',
-  },
-  expenseBg: {
-    backgroundColor: '#FEE2E2',
-  },
-  transactionEmoji: {
-    fontSize: 20,
-  },
-  transactionInfo: {
-    flex: 1,
-  },
-  transactionTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#0E3E3E',
-  },
-  transactionSubtitle: {
-    fontSize: 12,
-    color: '#0E3E3E',
-    opacity: 0.6,
-    marginTop: 2,
-  },
-  transactionAmount: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  incomeText: {
-    color: '#15803D',
-  },
-  expenseText: {
-    color: '#B91C1C',
-  },
-  bottomSummary: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
-    marginTop: 6,
-    marginBottom: 12,
-    shadowColor: '#0E3E3E',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
-  },
-  bottomLabel: {
-    fontSize: 13,
-    color: '#0E3E3E',
-    opacity: 0.7,
-  },
-  bottomValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0E3E3E',
-    marginTop: 4,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.35)',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
+  },
+  modalContainer: {
+    width: '85%',
+    maxWidth: 360,
   },
   modalContent: {
-    width: '100%',
-    maxWidth: 420,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: '#000000',
+    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 20,
+    elevation: 12,
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#0E3E3E',
+    fontWeight: '600',
+    color: '#0A5C47',
     marginBottom: 16,
+    textAlign: 'center',
   },
   modalInput: {
+    height: 48,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 16,
+    borderColor: '#D1D5DB',
     paddingHorizontal: 16,
-    paddingVertical: Platform.select({ ios: 14, android: 10 }),
     fontSize: 16,
-    color: '#0E3E3E',
-    marginBottom: 16,
+    color: '#0A5C47',
+    backgroundColor: '#F9FAFB',
+    marginBottom: 20,
   },
-  modalCategories: {
-    marginBottom: 12,
-  },
-  modalLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#0E3E3E',
-    marginBottom: 8,
-  },
-  modalCategoryList: {
+  modalButtons: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  modalCategoryChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: '#F1F5F9',
-  },
-  modalCategoryChipActive: {
-    backgroundColor: '#00C897',
-  },
-  modalCategoryText: {
-    color: '#0E3E3E',
-    fontWeight: '600',
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     gap: 12,
-    marginTop: 12,
   },
-  modalSecondary: {
-    paddingHorizontal: 18,
-    paddingVertical: 12,
+  modalButton: {
+    flex: 1,
+    height: 48,
     borderRadius: 14,
-    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  modalSecondaryText: {
+  modalCancelButton: {
+    backgroundColor: '#EFF2F5',
+  },
+  modalConfirmButton: {
+    backgroundColor: '#13C88A',
+  },
+  modalCancelText: {
+    color: '#4B5563',
     fontWeight: '600',
-    color: '#0E3E3E',
   },
-  modalPrimary: {
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 14,
-    backgroundColor: '#00C897',
-  },
-  modalPrimaryText: {
-    fontWeight: '700',
+  modalConfirmText: {
     color: '#FFFFFF',
+    fontWeight: '600',
   },
 });
