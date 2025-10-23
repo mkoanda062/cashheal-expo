@@ -225,13 +225,13 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
         return (
           <View style={styles.questionContainer}>
             <Text style={styles.questionTitle}>{t('advisor.monthly_budget')}</Text>
-            <Text style={styles.questionSubtitle}>Entrez votre revenu mensuel total</Text>
+            <Text style={styles.questionSubtitle}>{t('advisor.monthly_budget_hint')}</Text>
             <TextInput
               style={styles.input}
               value={inputValue}
               onChangeText={setInputValue}
               keyboardType="numeric"
-              placeholder="Ex: 3000"
+              placeholder={t('advisor.monthly_budget_placeholder')}
               placeholderTextColor="#94a3b8"
             />
           </View>
@@ -241,13 +241,13 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
         return (
           <View style={styles.questionContainer}>
             <Text style={styles.questionTitle}>{t('advisor.rent')}</Text>
-            <Text style={styles.questionSubtitle}>Montant de votre loyer ou crédit immobilier</Text>
+            <Text style={styles.questionSubtitle}>{t('advisor.rent_hint')}</Text>
             <TextInput
               style={styles.input}
               value={inputValue}
               onChangeText={setInputValue}
               keyboardType="numeric"
-              placeholder="Ex: 1000"
+              placeholder={t('advisor.rent_placeholder')}
               placeholderTextColor="#94a3b8"
             />
           </View>
@@ -257,13 +257,13 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
         return (
           <View style={styles.questionContainer}>
             <Text style={styles.questionTitle}>{t('advisor.daily_spending')}</Text>
-            <Text style={styles.questionSubtitle}>Montant quotidien pour vos dépenses personnelles</Text>
+            <Text style={styles.questionSubtitle}>{t('advisor.daily_spending_hint')}</Text>
             <TextInput
               style={styles.input}
               value={inputValue}
               onChangeText={setInputValue}
               keyboardType="numeric"
-              placeholder="Ex: 50"
+              placeholder={t('advisor.daily_spending_placeholder')}
               placeholderTextColor="#94a3b8"
             />
           </View>
@@ -273,7 +273,7 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
         return (
           <View style={styles.questionContainer}>
             <Text style={styles.questionTitle}>{t('advisor.savings_goal')}</Text>
-            <Text style={styles.questionSubtitle}>Choisissez votre stratégie d'épargne</Text>
+            <Text style={styles.questionSubtitle}>{t('advisor.savings_hint')}</Text>
             
             <View style={styles.savingsOptions}>
               <TouchableOpacity
@@ -286,8 +286,8 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
               >
                 <View style={styles.savingsOptionContent}>
                   <Text style={styles.savingsOptionTitle}>{t('advisor.savings_30')}</Text>
-                  <Text style={styles.savingsOptionSubtitle}>30% d'épargne</Text>
-                  <Text style={styles.savingsOptionDescription}>Sécurité maximale</Text>
+                  <Text style={styles.savingsOptionSubtitle}>{t('advisor.savings_30_subtitle')}</Text>
+                  <Text style={styles.savingsOptionDescription}>{t('advisor.savings_30_desc')}</Text>
                 </View>
               </TouchableOpacity>
               
@@ -301,8 +301,8 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
               >
                 <View style={styles.savingsOptionContent}>
                   <Text style={styles.savingsOptionTitle}>{t('advisor.savings_balanced')}</Text>
-                  <Text style={styles.savingsOptionSubtitle}>20% d'épargne</Text>
-                  <Text style={styles.savingsOptionDescription}>Juste milieu</Text>
+                  <Text style={styles.savingsOptionSubtitle}>{t('advisor.savings_balanced_subtitle')}</Text>
+                  <Text style={styles.savingsOptionDescription}>{t('advisor.savings_balanced_desc')}</Text>
                 </View>
               </TouchableOpacity>
               
@@ -316,8 +316,8 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
               >
                 <View style={styles.savingsOptionContent}>
                   <Text style={styles.savingsOptionTitle}>{t('advisor.savings_invest')}</Text>
-                  <Text style={styles.savingsOptionSubtitle}>10% d'épargne</Text>
-                  <Text style={styles.savingsOptionDescription}>Plus d'investissement</Text>
+                  <Text style={styles.savingsOptionSubtitle}>{t('advisor.savings_invest_subtitle')}</Text>
+                  <Text style={styles.savingsOptionDescription}>{t('advisor.savings_invest_desc')}</Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -327,44 +327,44 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
       case 'result':
         return (
           <View style={styles.resultContainer}>
-            <Text style={styles.resultTitle}>Votre plan budgétaire</Text>
+            <Text style={styles.resultTitle}>{t('advisor.result_title')}</Text>
             
             <View style={styles.summaryCard}>
-              <Text style={styles.summaryTitle}>Résumé mensuel</Text>
+              <Text style={styles.summaryTitle}>{t('advisor.summary_monthly')}</Text>
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Budget total</Text>
+                <Text style={styles.summaryLabel}>{t('advisor.summary_budget_total')}</Text>
                 <Text style={styles.summaryValue}>{formatCurrency(budgetPlan.monthlyBudget)}</Text>
               </View>
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Loyer</Text>
+                <Text style={styles.summaryLabel}>{t('advisor.summary_rent')}</Text>
                 <Text style={styles.summaryValue}>{formatCurrency(budgetPlan.rent)}</Text>
               </View>
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Charges fixes (10%)</Text>
+                <Text style={styles.summaryLabel}>{t('advisor.summary_fixed_charges')}</Text>
                 <Text style={styles.summaryValue}>{formatCurrency(budgetPlan.fixedCharges)}</Text>
               </View>
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Épargne ({budgetPlan.savingsPercentage}%)</Text>
+                <Text style={styles.summaryLabel}>{t('advisor.summary_savings').replace('{percentage}', String(budgetPlan.savingsPercentage))}</Text>
                 <Text style={styles.summaryValue}>{formatCurrency(budgetPlan.monthlyBudget * budgetPlan.savingsPercentage / 100)}</Text>
               </View>
               <View style={[styles.summaryRow, styles.summaryRowHighlighted]}>
-                <Text style={styles.summaryLabelHighlighted}>Disponible pour dépenses</Text>
+                <Text style={styles.summaryLabelHighlighted}>{t('advisor.summary_available')}</Text>
                 <Text style={styles.summaryValueHighlighted}>{formatCurrency(budgetPlan.availableForSpending)}</Text>
               </View>
             </View>
 
             <View style={styles.recommendationsCard}>
-              <Text style={styles.recommendationsTitle}>Recommandations</Text>
+              <Text style={styles.recommendationsTitle}>{t('advisor.recommendations_title')}</Text>
               <View style={styles.recommendationItem}>
-                <Text style={styles.recommendationLabel}>Dépenses quotidiennes</Text>
+                <Text style={styles.recommendationLabel}>{t('advisor.recommendation_daily')}</Text>
                 <Text style={styles.recommendationValue}>{formatCurrency(budgetPlan.availableForSpending / 30)}</Text>
               </View>
               <View style={styles.recommendationItem}>
-                <Text style={styles.recommendationLabel}>Dépenses hebdomadaires</Text>
+                <Text style={styles.recommendationLabel}>{t('advisor.recommendation_weekly')}</Text>
                 <Text style={styles.recommendationValue}>{formatCurrency(budgetPlan.availableForSpending / 4)}</Text>
               </View>
               <View style={styles.recommendationItem}>
-                <Text style={styles.recommendationLabel}>Dépenses mensuelles</Text>
+                <Text style={styles.recommendationLabel}>{t('advisor.recommendation_monthly')}</Text>
                 <Text style={styles.recommendationValue}>{formatCurrency(budgetPlan.availableForSpending)}</Text>
               </View>
             </View>
@@ -408,7 +408,7 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
               <Path d="M15 18L9 12L15 6" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
             </Svg>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Conseiller Budget</Text>
+          <Text style={styles.headerTitle}>{t('advisor.title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
 
@@ -451,14 +451,14 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
               onPress={savePlan}
               activeOpacity={0.8}
             >
-              <Text style={styles.saveButtonText}>Sauvegarder</Text>
+              <Text style={styles.saveButtonText}>{t('advisor.save')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.resetButton}
               onPress={resetQuestionnaire}
               activeOpacity={0.8}
             >
-              <Text style={styles.resetButtonText}>Recommencer</Text>
+              <Text style={styles.resetButtonText}>{t('advisor.reset')}</Text>
             </TouchableOpacity>
           </View>
         )}

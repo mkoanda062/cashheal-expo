@@ -19,6 +19,7 @@ import Svg, { Circle, Line, Path, Polygon, Polyline } from 'react-native-svg';
 import { Category, getCategories } from '../lib/db';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCurrency } from '../src/contexts/CurrencyContext';
+import { useLanguage } from '../src/contexts/LanguageContext';
 import storage from '../src/utils/persistentStorage';
 
 type Currency = 'USD' | 'EUR' | 'GBP' | 'CAD' | 'XAF' | 'XOF';
@@ -40,21 +41,21 @@ const BASE_PERIOD_PRESETS: Record<PeriodKey, PeriodPreset> = {
     budget: 50,
     average: 178.34,
     prediction: 40.0,
-    predictionMessage: 'Tu as dépensé 10 $ de moins que prévu continue comme ça.',
+    predictionMessage: 'home.prediction_message_day_default',
   },
   '2weeks': {
     spent: 210.75,
     budget: 350,
     average: 420.2,
     prediction: 512.55,
-    predictionMessage: 'Tu es sur la bonne voie pour rester sous le budget.',
+    predictionMessage: 'home.prediction_message_2weeks_default',
   },
   month: {
     spent: 845.3,
     budget: 1500,
     average: 1210.45,
     prediction: 1625.1,
-    predictionMessage: 'Tu devrais économiser 80 $ supplémentaires ce mois-ci.',
+    predictionMessage: 'home.prediction_message_month_default',
   },
 };
 
@@ -62,11 +63,11 @@ const CATEGORY_ORDER = ['food', 'shopping', 'leisure'] as const;
 
 const CATEGORY_FALLBACKS: Record<
   (typeof CATEGORY_ORDER)[number],
-  { label: string; amount: number; color: string }
+  { labelKey: string; amount: number; color: string }
 > = {
-  food: { label: 'Nourriture', amount: 65.15, color: '#FB9F3C' },
-  shopping: { label: 'Shopping', amount: 35.25, color: '#11C689' },
-  leisure: { label: 'Loisirs', amount: 17.97, color: '#7B61FF' },
+  food: { labelKey: 'home.category_food', amount: 65.15, color: '#FB9F3C' },
+  shopping: { labelKey: 'home.category_shopping', amount: 35.25, color: '#11C689' },
+  leisure: { labelKey: 'home.category_leisure', amount: 17.97, color: '#7B61FF' },
 };
 
 const FoodIcon = () => (
@@ -155,6 +156,7 @@ interface Props {
 
 export default function ModernHomeScreen({ navigation }: Props) {
   const { format } = useCurrency();
+  const { t } = useLanguage();
   const [categories, setCategories] = useState<Category[]>([]);
   const [period, setPeriod] = useState<PeriodKey>('day');
   const [periodDataMap, setPeriodDataMap] = useState<PeriodDataMap>(() => ({
@@ -304,7 +306,7 @@ export default function ModernHomeScreen({ navigation }: Props) {
         const amount = source ? Number(source.amount) || 0 : fallback.amount;
         return {
           key,
-          label: fallback.label,
+          label: fallback.labelKey,
           amount,
           color: fallback.color,
         };
@@ -408,9 +410,9 @@ const DonutChart = () => {
           >
             <View style={styles.headerContent}>
               <View>
-                <Text style={styles.welcomeHeading}>Bienvenue !</Text>
-                <Text style={styles.greetingText}>Bonjour 👋</Text>
-                <Text style={styles.welcomeText}>Prêt à soigner vos finances ?</Text>
+                <Text style={styles.welcomeHeading}>{t('home.welcome_heading')}</Text>
+                <Text style={styles.greetingText}>{t('home.greeting')}</Text>
+                <Text style={styles.welcomeText}>{t('home.welcome_subtitle')}</Text>
               </View>
               <TouchableOpacity activeOpacity={0.8} style={styles.notificationButton}>
                 <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
@@ -429,7 +431,7 @@ const DonutChart = () => {
 
             <View style={styles.contentSurface}>
               <View style={styles.summaryCard}>
-                <Text style={styles.summarySubtitle}>Tu As Dépensé Aujourd'hui</Text>
+                <Text style={styles.summarySubtitle}>{t('home.today_spent')}</Text>
                 <View style={styles.amountRow}>
                   <Text style={styles.summaryAmount}>{formatAmount(periodData.spent)}</Text>
                   <View style={styles.amountActions}>
@@ -452,14 +454,14 @@ const DonutChart = () => {
 
                 <View style={styles.budgetCard}>
                   <View style={styles.budgetHeader}>
-                    <Text style={styles.budgetLabel}>Budget du jour</Text>
+                    <Text style={styles.budgetLabel}>{t('home.daily_budget')}</Text>
                     <Text style={styles.budgetAmount}>{formatAmount(periodData.budget)}</Text>
                   </View>
                   <View style={styles.progressTrack}>
                     <View style={[styles.progressFill, { width: `${Math.max(progressRatio * 100, 6)}%` }]} />
                   </View>
                   <Text style={styles.budgetRemainingText}>
-                    Il te reste <Text style={styles.highlightedText}>{formatAmount(remainingBudget)}</Text> pour aujourd'hui.
+                    {t('home.remaining_today').replace('{amount}', formatAmount(remainingBudget))}
                   </Text>
                 </View>
 
@@ -469,32 +471,38 @@ const DonutChart = () => {
                     onPress={() => handlePeriodSelect('day')}
                     activeOpacity={0.9}
                   >
-                    <Text style={[styles.periodButtonText, period === 'day' && styles.periodButtonTextActive]}>Jour</Text>
+                    <Text style={[styles.periodButtonText, period === 'day' && styles.periodButtonTextActive]}>
+                      {t('home.period_day')}
+                    </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.periodButton, period === '2weeks' && styles.periodButtonActive]}
                     onPress={() => handlePeriodSelect('2weeks')}
                     activeOpacity={0.9}
                   >
-                    <Text style={[styles.periodButtonText, period === '2weeks' && styles.periodButtonTextActive]}>2 semaines</Text>
+                    <Text style={[styles.periodButtonText, period === '2weeks' && styles.periodButtonTextActive]}>
+                      {t('home.period_2weeks')}
+                    </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.periodButton, period === 'month' && styles.periodButtonActive]}
                     onPress={() => handlePeriodSelect('month')}
                     activeOpacity={0.9}
                   >
-                    <Text style={[styles.periodButtonText, period === 'month' && styles.periodButtonTextActive]}>Mois</Text>
+                    <Text style={[styles.periodButtonText, period === 'month' && styles.periodButtonTextActive]}>
+                      {t('home.period_month')}
+                    </Text>
                 </TouchableOpacity>
                 </View>
               </View>
 
               <View style={styles.statsRow}>
                 <View style={styles.statCard}>
-                  <Text style={styles.statTitle}>Moyenne cette semaine</Text>
+                  <Text style={styles.statTitle}>{t('home.weekly_average')}</Text>
                   <Text style={styles.statValue}>{formatAmount(periodData.average)}</Text>
                 </View>
                 <View style={styles.statCard}>
-                  <Text style={styles.statTitle}>Prédiction</Text>
+                  <Text style={styles.statTitle}>{t('home.prediction')}</Text>
                   <View style={styles.predictionRow}>
                     <Svg width={36} height={36} viewBox="0 0 36 36">
                       <Circle cx={18} cy={18} r={18} fill="#E8F9F0" />
@@ -509,13 +517,13 @@ const DonutChart = () => {
                         strokeLinejoin="round"
                       />
                     </Svg>
-                    <Text style={styles.predictionText}>{periodData.predictionMessage}</Text>
+                    <Text style={styles.predictionText}>{t(periodData.predictionMessage)}</Text>
                   </View>
                 </View>
               </View>
 
               <View style={styles.dashboardSection}>
-                <Text style={styles.dashboardTitle}>Tableau De Bord</Text>
+                <Text style={styles.dashboardTitle}>{t('home.dashboard_title')}</Text>
                 <View style={styles.dashboardContent}>
                   <DonutChart />
                   <View style={styles.dashboardCategories}>
@@ -525,7 +533,7 @@ const DonutChart = () => {
                           {renderCategoryIcon(segment.key)}
                         </View>
                         <View>
-                          <Text style={styles.dashboardCategoryLabel}>{segment.label}</Text>
+                          <Text style={styles.dashboardCategoryLabel}>{t(segment.label)}</Text>
                           <Text style={styles.dashboardCategoryAmount}>{formatAmount(segment.amount)}</Text>
                         </View>
                       </View>
@@ -546,10 +554,10 @@ const DonutChart = () => {
             >
               <View style={styles.modalContent}>
                 <Text style={styles.modalTitle}>
-                  {modalMode === 'add' ? 'Ajouter une dépense' : 'Annuler une dépense'}
+                  {modalMode === 'add' ? t('home.modal_add_title') : t('home.modal_remove_title')}
                 </Text>
                 
-                <Text style={styles.modalLabel}>Catégorie</Text>
+                <Text style={styles.modalLabel}>{t('home.modal_category')}</Text>
                 <View style={styles.categorySelector}>
                   {CATEGORY_ORDER.map((categoryKey) => {
                     const category = CATEGORY_FALLBACKS[categoryKey];
@@ -572,20 +580,20 @@ const DonutChart = () => {
                           styles.categoryLabel,
                           { color: isSelected ? '#FFFFFF' : '#0A5C47' }
                         ]}>
-                          {category.label}
+                          {t(category.labelKey)}
                         </Text>
                       </TouchableOpacity>
                     );
                   })}
                 </View>
 
-                <Text style={styles.modalLabel}>Montant</Text>
+                <Text style={styles.modalLabel}>{t('home.modal_amount')}</Text>
                 <TextInput
                   style={styles.modalInput}
                   value={modalAmount}
                   onChangeText={setModalAmount}
                   keyboardType="numeric"
-                  placeholder="Montant"
+                  placeholder={t('home.modal_amount_placeholder')}
                   placeholderTextColor="#95A5A6"
                 />
                 <View style={styles.modalButtons}>
@@ -593,14 +601,14 @@ const DonutChart = () => {
                     style={[styles.modalButton, styles.modalCancelButton]}
                     onPress={() => setExpenseModalVisible(false)}
                   >
-                    <Text style={styles.modalCancelText}>Fermer</Text>
+                    <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                     style={[styles.modalButton, styles.modalConfirmButton]}
                     onPress={handleModalConfirm}
                     activeOpacity={0.9}
               >
-                    <Text style={styles.modalConfirmText}>Valider</Text>
+                    <Text style={styles.modalConfirmText}>{t('common.confirm')}</Text>
               </TouchableOpacity>
             </View>
           </View>

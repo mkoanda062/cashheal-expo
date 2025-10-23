@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useNavigation } from '@react-navigation/native';
 import storage from '../src/utils/persistentStorage';
+import { useLanguage } from '../src/contexts/LanguageContext';
 
 const STORAGE_KEY = 'budgetAdvisorPlan';
 
@@ -12,6 +13,8 @@ export default function DetailsScreen() {
   const [monthlyIncome, setMonthlyIncome] = useState('');
   const [savingsTarget, setSavingsTarget] = useState('');
   const [plan, setPlan] = useState<any>(null);
+
+  const { t } = useLanguage();
 
   const formattedPlan = useMemo(() => {
     if (!plan) return null;
@@ -25,7 +28,7 @@ export default function DetailsScreen() {
   }, [plan]);
 
   const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value);
+    new Intl.NumberFormat(undefined, { style: 'currency', currency: 'EUR' }).format(value);
 
   const computePlan = async () => {
     const income = parseFloat(monthlyIncome) || 0;
@@ -41,36 +44,42 @@ export default function DetailsScreen() {
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
-      <Text style={styles.title}>Plan budgétaire rapide</Text>
+      <Text style={styles.title}>{t('details.title')}</Text>
 
-      <Text style={styles.label}>Revenu mensuel (EUR)</Text>
+      <Text style={styles.label}>{t('details.monthly_income_label')}</Text>
       <TextInput
         value={monthlyIncome}
         onChangeText={setMonthlyIncome}
         keyboardType="numeric"
         style={styles.input}
-        placeholder="Ex. 2500"
+        placeholder={t('details.monthly_income_placeholder')}
       />
 
-      <Text style={styles.label}>Objectif d’épargne mensuel</Text>
+      <Text style={styles.label}>{t('details.savings_target_label')}</Text>
       <TextInput
         value={savingsTarget}
         onChangeText={setSavingsTarget}
         keyboardType="numeric"
         style={styles.input}
-        placeholder="Ex. 700"
+        placeholder={t('details.savings_target_placeholder')}
       />
 
       <TouchableOpacity style={styles.primaryButton} onPress={computePlan}>
-        <Text style={styles.primaryButtonText}>Calculer</Text>
+        <Text style={styles.primaryButtonText}>{t('details.calculate_button')}</Text>
       </TouchableOpacity>
 
       {formattedPlan && (
         <View style={styles.outputCard}>
-          <Text style={styles.cardTitle}>Recommandations</Text>
-          <Text style={styles.cardLine}>Dépenses mensuelles : {formatCurrency(formattedPlan.available)}</Text>
-          <Text style={styles.cardLine}>Dépenses hebdo : {formatCurrency(formattedPlan.weeklyAllowance)}</Text>
-          <Text style={styles.cardLine}>Dépenses quotidiennes : {formatCurrency(formattedPlan.dailyAllowance)}</Text>
+          <Text style={styles.cardTitle}>{t('details.recommendations_title')}</Text>
+          <Text style={styles.cardLine}>
+            {t('details.recommendations_monthly').replace('{amount}', formatCurrency(formattedPlan.available))}
+          </Text>
+          <Text style={styles.cardLine}>
+            {t('details.recommendations_weekly').replace('{amount}', formatCurrency(formattedPlan.weeklyAllowance))}
+          </Text>
+          <Text style={styles.cardLine}>
+            {t('details.recommendations_daily').replace('{amount}', formatCurrency(formattedPlan.dailyAllowance))}
+          </Text>
         </View>
       )}
 
@@ -78,7 +87,7 @@ export default function DetailsScreen() {
         style={styles.secondaryButton}
         onPress={() => navigation.navigate('BudgetAdvisor')}
       >
-        <Text style={styles.secondaryButtonText}>Aller au plan détaillé</Text>
+        <Text style={styles.secondaryButtonText}>{t('details.go_to_advisor')}</Text>
       </TouchableOpacity>
     </View>
   );

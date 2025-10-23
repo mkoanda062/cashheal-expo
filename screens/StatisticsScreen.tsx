@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle, Line, Polygon } from 'react-native-svg';
 import { Platform } from 'react-native';
 import { Category, getCategories } from '../lib/db';
+import { useLanguage } from '../src/contexts/LanguageContext';
 
 interface Props {
   navigation: any;
@@ -25,6 +26,7 @@ const StatisticsScreen: React.FC<Props> = ({ navigation }) => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodKey>('month');
   const [totalSpent, setTotalSpent] = useState(0);
+  const { t } = useLanguage();
 
   useEffect(() => {
     loadData();
@@ -276,8 +278,8 @@ const StatisticsScreen: React.FC<Props> = ({ navigation }) => {
       
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Statistiques</Text>
-          <Text style={styles.headerSubtitle}>Analysez vos dépenses</Text>
+          <Text style={styles.headerTitle}>{t('statistics.title')}</Text>
+          <Text style={styles.headerSubtitle}>{t('statistics.subtitle')}</Text>
         </View>
 
         <ScrollView
@@ -307,25 +309,25 @@ const StatisticsScreen: React.FC<Props> = ({ navigation }) => {
             </View>
 
             <View style={styles.summaryCard}>
-              <Text style={styles.summaryTitle}>Dépenses totales</Text>
+              <Text style={styles.summaryTitle}>{t('statistics.total_spent')}</Text>
               <Text style={styles.summaryAmount}>{formatCurrency(totalSpent)}</Text>
               <Text style={styles.summaryPeriod}>{getPeriodLabel(selectedPeriod)}</Text>
             </View>
 
             <View style={styles.chartSection}>
-              <Text style={styles.chartTitle}>Répartition par catégorie</Text>
+              <Text style={styles.chartTitle}>{t('statistics.category_breakdown')}</Text>
               <View style={styles.chartContainer}>
                 <DonutChart />
               </View>
             </View>
 
             <View style={styles.barChartSection}>
-              <Text style={styles.chartTitle}>Comparaison des montants</Text>
+              <Text style={styles.chartTitle}>{t('statistics.amount_comparison')}</Text>
               <BarChart />
             </View>
 
             <View style={styles.categoriesSection}>
-              <Text style={styles.sectionTitle}>Détails par catégorie</Text>
+              <Text style={styles.sectionTitle}>{t('statistics.category_details')}</Text>
               {categories.map((category) => (
                 <View key={category.key} style={styles.categoryItem}>
                   <View style={styles.categoryInfo}>
@@ -345,7 +347,7 @@ const StatisticsScreen: React.FC<Props> = ({ navigation }) => {
             </View>
 
             <View style={styles.insightsCard}>
-              <Text style={styles.insightsTitle}>💡 Insights</Text>
+              <Text style={styles.insightsTitle}>💡 {t('statistics.insights_title')}</Text>
               <Text style={styles.insightsText}>
                 {totalSpent > 0 ? (
                   `Votre plus grande dépense est ${getCategoryLabel(

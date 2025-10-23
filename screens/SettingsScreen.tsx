@@ -177,7 +177,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           style: 'destructive',
           onPress: () => {
             // Ici vous pouvez ajouter la logique de suppression du compte
-            Alert.alert('Compte supprimé', 'Votre compte a été supprimé avec succès.');
+            Alert.alert(t('settings.delete_account_success_title'), t('settings.delete_account_success_body'));
           },
         },
       ]
@@ -262,7 +262,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Choisir une devise</Text>
+          <Text style={styles.modalTitle}>{t('settings.currency_modal_title')}</Text>
           <FlatList
             data={CURRENCY_OPTIONS}
             keyExtractor={(item) => item.code}
@@ -296,12 +296,12 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                   }
                 }}
               >
-                <Text style={styles.modalFooterText}>Utiliser la devise du plan sauvegardé</Text>
+                <Text style={styles.modalFooterText}>{t('settings.currency_modal_use_saved')}</Text>
               </TouchableOpacity>
             ) : undefined}
           />
           <TouchableOpacity style={styles.modalCloseButton} onPress={() => setCurrencyModalVisible(false)}>
-            <Text style={styles.modalCloseText}>Fermer</Text>
+            <Text style={styles.modalCloseText}>{t('common.close')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -316,14 +316,14 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         <TouchableOpacity
           style={styles.compactSelectorButton}
           onPress={() => {
-            Alert.alert(
-              t('settings.language'),
-              'Sélectionnez votre langue préférée',
-              LANGUAGES.map(lang => ({
-                text: `${lang.flag} ${lang.name}`,
-                onPress: () => handleLanguageChange(lang.code as Language),
-              }))
-            );
+    Alert.alert(
+      t('settings.language'),
+      t('settings.choose_language'),
+      LANGUAGES.map(lang => ({
+        text: `${lang.flag} ${lang.name}`,
+        onPress: () => handleLanguageChange(lang.code as Language),
+      }))
+    );
           }}
           activeOpacity={0.8}
         >
@@ -353,14 +353,14 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         <TouchableOpacity
           style={styles.compactSelectorButton}
           onPress={() => {
-            Alert.alert(
-              t('settings.country'),
-              'Sélectionnez votre pays',
-              COUNTRIES.map(c => ({
-                text: `${c.flag} ${c.name}`,
-                onPress: () => handleCountryChange(c.code as Country),
-              }))
-            );
+    Alert.alert(
+      t('settings.country'),
+      t('settings.choose_country'),
+      COUNTRIES.map(c => ({
+        text: `${c.flag} ${c.name}`,
+        onPress: () => handleCountryChange(c.code as Country),
+      }))
+    );
           }}
           activeOpacity={0.8}
         >
@@ -390,7 +390,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>{t('settings.title')}</Text>
-          <Text style={styles.headerSubtitle}>Personnalisez votre expérience</Text>
+          <Text style={styles.headerSubtitle}>{t('settings.subtitle')}</Text>
         </View>
 
         <ScrollView
@@ -399,7 +399,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
         >
           <View style={styles.content}>
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Préférences</Text>
+              <Text style={styles.sectionTitle}>{t('settings.section_preferences')}</Text>
               
               <View style={styles.sectionCard}>
                 <Text style={styles.sectionCardTitle}>{t('settings.currency')}</Text>
@@ -423,8 +423,8 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
               
               <View style={styles.sectionCard}>
                 {renderSettingItem(
-                  'Notifications push',
-                  'Recevoir des notifications sur vos dépenses',
+                  t('settings.push_notifications_title'),
+                  t('settings.push_notifications_subtitle'),
                   undefined,
                   <Switch
                     value={notifications}
@@ -448,12 +448,12 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Sécurité</Text>
+              <Text style={styles.sectionTitle}>{t('settings.section_security')}</Text>
               
               <View style={styles.sectionCard}>
                 {renderSettingItem(
-                  'Authentification biométrique',
-                  'Utiliser Face ID ou Touch ID',
+                  t('settings.biometric_title'),
+                  t('settings.biometric_subtitle'),
                   undefined,
                   <Switch
                     value={biometric}
@@ -477,12 +477,12 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Apparence</Text>
+              <Text style={styles.sectionTitle}>{t('settings.section_appearance')}</Text>
               
               <View style={styles.sectionCard}>
                 {renderSettingItem(
-                  'Mode sombre',
-                  'Activer le thème sombre',
+                  t('settings.dark_mode_title'),
+                  t('settings.dark_mode_subtitle'),
                   undefined,
                   <Switch
                     value={darkMode}
@@ -501,15 +501,15 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Compte</Text>
+              <Text style={styles.sectionTitle}>{t('settings.section_account')}</Text>
               
               <View style={styles.sectionCard}>
                 {renderSettingItem(
-                  'Informations personnelles',
-                  'Modifier votre profil',
+                  t('settings.personal_info_title'),
+                  t('settings.personal_info_subtitle'),
                   () => {
                     // Navigation vers la page de profil
-                    Alert.alert('Profil', 'Fonctionnalité à venir');
+                    Alert.alert(t('settings.personal_info_alert_title'), t('settings.personal_info_alert_body'));
                   },
                   undefined,
                   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
@@ -527,12 +527,12 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Actions</Text>
+              <Text style={styles.sectionTitle}>{t('settings.section_actions')}</Text>
               
               <View style={styles.sectionCard}>
                 {renderSettingItem(
-                  'Se déconnecter',
-                  'Déconnexion de votre compte',
+                  t('settings.logout_title'),
+                  t('settings.logout_subtitle'),
                   handleLogout,
                   undefined,
                   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
@@ -561,8 +561,8 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
                 )}
                 
                 {renderSettingItem(
-                  'Supprimer le compte',
-                  'Supprimer définitivement votre compte',
+                  t('settings.delete_account_title'),
+                  t('settings.delete_account_subtitle'),
                   handleDeleteAccount,
                   undefined,
                   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
