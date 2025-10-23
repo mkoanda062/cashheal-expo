@@ -3,7 +3,10 @@ import { NavigationContainer, DefaultTheme, NavigatorScreenParams } from '@react
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { CurrencyProvider } from './src/contexts/CurrencyContext';
+import { LanguageProvider, useLanguage } from './src/contexts/LanguageContext';
 
 import ModernHomeScreen from './screens/ModernHomeScreen';
 import DetailsScreen from './screens/DetailsScreen';
@@ -30,6 +33,8 @@ const NAV_THEME = {
 };
 
 function MainTabs() {
+  const { t } = useLanguage();
+  
   return (
     <AppTabs.Navigator
       screenOptions={({ route }) => ({
@@ -63,10 +68,10 @@ function MainTabs() {
         },
       })}
     >
-      <AppTabs.Screen name="HomeTab" component={ModernHomeScreen} options={{ title: 'Accueil' }} />
-      <AppTabs.Screen name="BudgetAdvisorTab" component={BudgetAdvisorScreen} options={{ title: 'Conseiller' }} />
-      <AppTabs.Screen name="StatisticsTab" component={StatisticsScreen} options={{ title: 'Statistiques' }} />
-      <AppTabs.Screen name="SettingsTab" component={SettingsScreen} options={{ title: 'Paramètres' }} />
+      <AppTabs.Screen name="HomeTab" component={ModernHomeScreen} options={{ title: t('nav.home') }} />
+      <AppTabs.Screen name="BudgetAdvisorTab" component={BudgetAdvisorScreen} options={{ title: t('nav.advisor') }} />
+      <AppTabs.Screen name="StatisticsTab" component={StatisticsScreen} options={{ title: t('nav.stats') }} />
+      <AppTabs.Screen name="SettingsTab" component={SettingsScreen} options={{ title: t('nav.settings') }} />
     </AppTabs.Navigator>
   );
 }
@@ -90,7 +95,12 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
-        const stored = await AsyncStorage.getItem(HAS_COMPLETED_ONBOARDING);
+        let stored;
+        if (Platform.OS === 'web') {
+          stored = localStorage.getItem(HAS_COMPLETED_ONBOARDING);
+        } else {
+          stored = await AsyncStorage.getItem(HAS_COMPLETED_ONBOARDING);
+        }
         setInitialRoute(stored ? 'MainTabs' : 'Onboarding');
       } catch (error) {
         console.warn('Failed to check onboarding completion', error);
@@ -104,18 +114,22 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer theme={NAV_THEME}>
-      <RootStack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
-        <RootStack.Screen name="Splash" component={SplashScreen} options={{ headerShown: false }} />
-        <RootStack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
-        <RootStack.Screen name="SecurityCode" component={SecurityCodeScreen} options={{ headerShown: false }} />
-        <RootStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ headerShown: false }} />
-        <RootStack.Screen name="PasswordChangedSuccess" component={PasswordChangedSuccessScreen} options={{ headerShown: false }} />
-        <RootStack.Screen name="FaceIdSetup" component={FaceIdSetupScreen} options={{ headerShown: false }} />
-        <RootStack.Screen name="BudgetAdvisor" component={BudgetAdvisorScreen} options={{ headerShown: false }} />
-        <RootStack.Screen name="MainTabs" component={MainTabs} />
-        <RootStack.Screen name="Details" component={DetailsScreen} />
-      </RootStack.Navigator>
-    </NavigationContainer>
+    <LanguageProvider>
+      <CurrencyProvider>
+        <NavigationContainer theme={NAV_THEME}>
+          <RootStack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
+            <RootStack.Screen name="Splash" component={SplashScreen} options={{ headerShown: false }} />
+            <RootStack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
+            <RootStack.Screen name="SecurityCode" component={SecurityCodeScreen} options={{ headerShown: false }} />
+            <RootStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ headerShown: false }} />
+            <RootStack.Screen name="PasswordChangedSuccess" component={PasswordChangedSuccessScreen} options={{ headerShown: false }} />
+            <RootStack.Screen name="FaceIdSetup" component={FaceIdSetupScreen} options={{ headerShown: false }} />
+            <RootStack.Screen name="BudgetAdvisor" component={BudgetAdvisorScreen} options={{ headerShown: false }} />
+            <RootStack.Screen name="MainTabs" component={MainTabs} />
+            <RootStack.Screen name="Details" component={DetailsScreen} />
+          </RootStack.Navigator>
+        </NavigationContainer>
+      </CurrencyProvider>
+    </LanguageProvider>
   );
 }

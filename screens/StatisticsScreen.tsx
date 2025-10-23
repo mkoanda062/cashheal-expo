@@ -11,7 +11,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle, Line, Polygon } from 'react-native-svg';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { Category, getCategories } from '../lib/db';
 
 interface Props {

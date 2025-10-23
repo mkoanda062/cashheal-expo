@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -12,10 +12,13 @@ import {
   Animated,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle } from 'react-native-svg';
+import { useFinance } from '../src/hooks/useFinance';
+import { useCurrency } from '../src/contexts/CurrencyContext';
+import { useLanguage } from '../src/contexts/LanguageContext';
+import storage from '../src/utils/persistentStorage';
 
 interface Props {
   navigation: any;
@@ -40,6 +43,9 @@ const STORAGE_KEY = 'budgetAdvisorPlan';
 
 const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
+  const { result, compute } = useFinance();
+  const { format } = useCurrency();
+  const { t } = useLanguage();
   const [currentStep, setCurrentStep] = useState<QuestionStep>('budget');
   const [budgetPlan, setBudgetPlan] = useState<BudgetPlan>({
     monthlyBudget: 0,
@@ -62,7 +68,7 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
 
   const loadSavedPlan = async () => {
     try {
-      const saved = await AsyncStorage.getItem(STORAGE_KEY);
+      const saved = await storage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed: BudgetPlan = JSON.parse(saved);
         setBudgetPlan(parsed);
@@ -88,15 +94,16 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
     callback();
   };
 
+  // Utiliser le formatage de devise du contexte
   const formatCurrency = useCallback((amount: number) => {
-    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(amount || 0);
-  }, []);
+    return format(amount || 0);
+  }, [format]);
 
   const parseInput = (value: string) => {
     return parseFloat(value.replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0;
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     const value = parseInput(inputValue);
     
     if (value <= 0) {
@@ -134,24 +141,31 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
     setInputValue('');
     
     if (nextStep === 'result') {
-      calculateFinalPlan(updatedPlan);
+      await calculateFinalPlan(updatedPlan);
     } else {
       animateTransition(() => setCurrentStep(nextStep));
     }
   };
 
-  const calculateFinalPlan = (plan: BudgetPlan) => {
+  const calculateFinalPlan = async (plan: BudgetPlan) => {
     try {
-      const fixedCharges = plan.rent + (plan.monthlyBudget * 0.1); // 10% pour charges fixes
-      const savingsAmount = plan.monthlyBudget * plan.savingsPercentage / 100;
-      const availableForSpending = plan.monthlyBudget - fixedCharges - savingsAmount;
-      
+    const calcResult = await compute({
+        monthlyIncome: plan.monthlyBudget,
+        rent: plan.rent,
+        dailySpending: plan.dailySpending,
+        savingsPercentage: plan.savingsPercentage,
+      });
+
       const updatedPlan = {
         ...plan,
-        fixedCharges,
-        availableForSpending: Math.max(0, availableForSpending), // S'assurer que c'est positif
+        fixedCharges: calcResult.fixedCharges,
+        availableForSpending: calcResult.availableForSpending,
+        monthlySpending: calcResult.monthlySpending,
+        weeklySpending: calcResult.weeklySpending,
+        biweeklySpending: calcResult.biweeklySpending,
+        dailySpending: calcResult.dailySpending,
       };
-      
+
       setBudgetPlan(updatedPlan);
       animateTransition(() => setCurrentStep('result'));
     } catch (error) {
@@ -175,8 +189,12 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const savePlan = async () => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(budgetPlan));
+      try {
+        const toSave = {
+          ...budgetPlan,
+          timestamp: Date.now(),
+        };
+        await storage.setItem(STORAGE_KEY, JSON.stringify(toSave));
       Alert.alert('Plan sauvegardé', 'Votre plan budgétaire a été enregistré avec succès.');
     } catch (error) {
       console.error('Failed to save plan', error);
@@ -206,7 +224,7 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
       case 'budget':
         return (
           <View style={styles.questionContainer}>
-            <Text style={styles.questionTitle}>Quel est votre budget mensuel ?</Text>
+            <Text style={styles.questionTitle}>{t('advisor.monthly_budget')}</Text>
             <Text style={styles.questionSubtitle}>Entrez votre revenu mensuel total</Text>
             <TextInput
               style={styles.input}
@@ -222,7 +240,7 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
       case 'rent':
         return (
           <View style={styles.questionContainer}>
-            <Text style={styles.questionTitle}>Quel est votre loyer mensuel ?</Text>
+            <Text style={styles.questionTitle}>{t('advisor.rent')}</Text>
             <Text style={styles.questionSubtitle}>Montant de votre loyer ou crédit immobilier</Text>
             <TextInput
               style={styles.input}
@@ -238,7 +256,7 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
       case 'spending':
         return (
           <View style={styles.questionContainer}>
-            <Text style={styles.questionTitle}>Combien voulez-vous dépenser par jour ?</Text>
+            <Text style={styles.questionTitle}>{t('advisor.daily_spending')}</Text>
             <Text style={styles.questionSubtitle}>Montant quotidien pour vos dépenses personnelles</Text>
             <TextInput
               style={styles.input}
@@ -254,7 +272,7 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
       case 'savings':
         return (
           <View style={styles.questionContainer}>
-            <Text style={styles.questionTitle}>Quel type d'épargne préférez-vous ?</Text>
+            <Text style={styles.questionTitle}>{t('advisor.savings_goal')}</Text>
             <Text style={styles.questionSubtitle}>Choisissez votre stratégie d'épargne</Text>
             
             <View style={styles.savingsOptions}>
@@ -267,7 +285,7 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
                 activeOpacity={0.8}
               >
                 <View style={styles.savingsOptionContent}>
-                  <Text style={styles.savingsOptionTitle}>Conservateur</Text>
+                  <Text style={styles.savingsOptionTitle}>{t('advisor.savings_30')}</Text>
                   <Text style={styles.savingsOptionSubtitle}>30% d'épargne</Text>
                   <Text style={styles.savingsOptionDescription}>Sécurité maximale</Text>
                 </View>
@@ -282,7 +300,7 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
                 activeOpacity={0.8}
               >
                 <View style={styles.savingsOptionContent}>
-                  <Text style={styles.savingsOptionTitle}>Équilibré</Text>
+                  <Text style={styles.savingsOptionTitle}>{t('advisor.savings_balanced')}</Text>
                   <Text style={styles.savingsOptionSubtitle}>20% d'épargne</Text>
                   <Text style={styles.savingsOptionDescription}>Juste milieu</Text>
                 </View>
@@ -297,7 +315,7 @@ const BudgetAdvisorScreen: React.FC<Props> = ({ navigation }) => {
                 activeOpacity={0.8}
               >
                 <View style={styles.savingsOptionContent}>
-                  <Text style={styles.savingsOptionTitle}>Dynamique</Text>
+                  <Text style={styles.savingsOptionTitle}>{t('advisor.savings_invest')}</Text>
                   <Text style={styles.savingsOptionSubtitle}>10% d'épargne</Text>
                   <Text style={styles.savingsOptionDescription}>Plus d'investissement</Text>
                 </View>

@@ -1,12 +1,24 @@
-import {
-  openDatabaseAsync,
-  type SQLiteDatabase,
-  type SQLiteRunResult,
-} from 'expo-sqlite';
+import { Platform } from 'react-native';
 
-const dbPromise = openDatabaseAsync('cashheal.db');
+// Import conditionnel selon la plateforme
+let dbModule: any;
+if (Platform.OS === 'web') {
+  dbModule = require('./db.web');
+} else {
+  const expoSqlite = require('expo-sqlite');
+  dbModule = {
+    openDatabaseAsync: expoSqlite.openDatabaseAsync,
+    SQLiteDatabase: expoSqlite.SQLiteDatabase,
+    SQLiteRunResult: expoSqlite.SQLiteRunResult,
+  };
+}
 
-async function getDatabase(): Promise<SQLiteDatabase> {
+const dbPromise = Platform.OS === 'web' ? null : dbModule.openDatabaseAsync('cashheal.db');
+
+async function getDatabase(): Promise<any> {
+  if (Platform.OS === 'web') {
+    return null; // Pas de base de données SQLite sur web
+  }
   return dbPromise;
 }
 
@@ -15,6 +27,10 @@ export type Category = { id: number; key: string; label: string; amount: number;
 export type Transaction = { id: number; type: 'income' | 'expense'; categoryKey?: string | null; amount: number; createdAt: number };
 
 export async function initializeDatabase(): Promise<void> {
+  if (Platform.OS === 'web') {
+    return dbModule.initializeDatabase();
+  }
+
   const db = await getDatabase();
 
   await db.withExclusiveTransactionAsync(async (txn) => {
@@ -55,31 +71,46 @@ export async function initializeDatabase(): Promise<void> {
 }
 
 export async function addNote(title: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    return dbModule.addNote(title);
+  }
   const db = await getDatabase();
   await db.runAsync('INSERT INTO notes (title) VALUES (?);', [title]);
 }
 
 export async function getNotes(): Promise<{ id: number; title: string }[]> {
+  if (Platform.OS === 'web') {
+    return dbModule.getNotes();
+  }
   const db = await getDatabase();
   return db.getAllAsync<{ id: number; title: string }>('SELECT id, title FROM notes ORDER BY id DESC;', []);
 }
 
 export async function getBalance(): Promise<Balance> {
+  if (Platform.OS === 'web') {
+    return dbModule.getBalance();
+  }
   const db = await getDatabase();
   const row = await db.getFirstAsync<Balance>('SELECT total, current FROM balances WHERE id = 1;', []);
   return row ?? { total: 0, current: 0 };
 }
 
 export async function getCategories(): Promise<Category[]> {
+  if (Platform.OS === 'web') {
+    return dbModule.getCategories();
+  }
   const db = await getDatabase();
   return db.getAllAsync<Category>('SELECT id, key, label, amount, color, emoji FROM categories ORDER BY id ASC;', []);
 }
 
 export async function setBalance(total: number, current: number): Promise<void> {
+  if (Platform.OS === 'web') {
+    return dbModule.setBalance(total, current);
+  }
   const db = await getDatabase();
 
   await db.withExclusiveTransactionAsync(async (txn) => {
-    const result: SQLiteRunResult = await txn.runAsync('UPDATE balances SET total = ?, current = ? WHERE id = 1;', [
+    const result: any = await txn.runAsync('UPDATE balances SET total = ?, current = ? WHERE id = 1;', [
       total,
       current,
     ]);
@@ -91,16 +122,25 @@ export async function setBalance(total: number, current: number): Promise<void> 
 }
 
 export async function updateCategoryAmount(key: string, delta: number): Promise<void> {
+  if (Platform.OS === 'web') {
+    return dbModule.updateCategoryAmount(key, delta);
+  }
   const db = await getDatabase();
   await db.runAsync('UPDATE categories SET amount = amount + ? WHERE key = ?;', [delta, key]);
 }
 
 export async function updateCategory(key: string, amount: number): Promise<void> {
+  if (Platform.OS === 'web') {
+    return dbModule.updateCategory(key, amount);
+  }
   const db = await getDatabase();
   await db.runAsync('UPDATE categories SET amount = ? WHERE key = ?;', [amount, key]);
 }
 
 export async function addTransaction(type: 'income' | 'expense', amount: number, categoryKey?: string | null): Promise<void> {
+  if (Platform.OS === 'web') {
+    return dbModule.addTransaction(type, amount, categoryKey);
+  }
   const db = await getDatabase();
   await db.runAsync('INSERT INTO transactions (type, categoryKey, amount, createdAt) VALUES (?, ?, ?, ?);', [
     type,
@@ -117,6 +157,9 @@ interface GetTransactionsOptions {
 }
 
 export async function getTransactions(options: GetTransactionsOptions = {}): Promise<Transaction[]> {
+  if (Platform.OS === 'web') {
+    return dbModule.getTransactions(options);
+  }
   const db = await getDatabase();
   const { from, to, limit } = options;
 
@@ -147,6 +190,9 @@ export async function getTransactions(options: GetTransactionsOptions = {}): Pro
 }
 
 export async function getRecentTransactions(limit = 50): Promise<Transaction[]> {
+  if (Platform.OS === 'web') {
+    return dbModule.getRecentTransactions(limit);
+  }
   const db = await getDatabase();
   return db.getAllAsync<Transaction>(
     'SELECT id, type, categoryKey, amount, createdAt FROM transactions ORDER BY createdAt DESC LIMIT ?;',

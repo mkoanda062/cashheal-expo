@@ -13,7 +13,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+import storage from '../src/utils/persistentStorage';
 
 import Slide2A from '../assets/icons/onboarding-2a.svg';
 import Slide2B from '../assets/icons/onboarding-2b.svg';
@@ -91,7 +92,7 @@ export default function OnboardingScreen({ navigation }: Props) {
       scrollRef.current?.scrollTo({ x: nextIndex * width, animated: true });
       setCurrentIndex(nextIndex);
     } else {
-      AsyncStorage.setItem(HAS_COMPLETED_ONBOARDING, 'true').catch(() => undefined);
+      storage.setItem(HAS_COMPLETED_ONBOARDING, 'true').catch(() => undefined);
       navigation.reset({ index: 0, routes: [{ name: 'BudgetAdvisor' }] });
     }
   };

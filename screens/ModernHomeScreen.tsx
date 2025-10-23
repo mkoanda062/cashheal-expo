@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -19,6 +18,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Line, Path, Polygon, Polyline } from 'react-native-svg';
 import { Category, getCategories } from '../lib/db';
 import { useFocusEffect } from '@react-navigation/native';
+import { useCurrency } from '../src/contexts/CurrencyContext';
+import storage from '../src/utils/persistentStorage';
 
 type Currency = 'USD' | 'EUR' | 'GBP' | 'CAD' | 'XAF' | 'XOF';
 type PeriodKey = 'day' | '2weeks' | 'month';
@@ -153,8 +154,8 @@ interface Props {
 }
 
 export default function ModernHomeScreen({ navigation }: Props) {
+  const { format } = useCurrency();
   const [categories, setCategories] = useState<Category[]>([]);
-  const [currency, setCurrency] = useState<Currency>('USD');
   const [period, setPeriod] = useState<PeriodKey>('day');
   const [periodDataMap, setPeriodDataMap] = useState<PeriodDataMap>(() => ({
     day: { ...BASE_PERIOD_PRESETS.day },
@@ -181,38 +182,30 @@ export default function ModernHomeScreen({ navigation }: Props) {
 
   const loadData = async () => {
     try {
-      const savedCurrency = await AsyncStorage.getItem('currency');
-      if (
-        savedCurrency === 'USD' ||
-        savedCurrency === 'EUR' ||
-        savedCurrency === 'GBP' ||
-        savedCurrency === 'CAD' ||
-        savedCurrency === 'XAF' ||
-        savedCurrency === 'XOF'
-      ) {
-        setCurrency(savedCurrency);
-      }
-
       const loadedCategories = await getCategories();
       setCategories(loadedCategories);
 
       // Charger le plan budgétaire du questionnaire
-      const budgetPlan = await AsyncStorage.getItem('budgetAdvisorPlan');
+      const budgetPlan = await storage.getItem('budgetAdvisorPlan');
+      
       if (budgetPlan) {
         const plan = JSON.parse(budgetPlan);
         // Mettre à jour les budgets basés sur le questionnaire
         setPeriodDataMap(prev => ({
           day: {
             ...prev.day,
-            budget: plan.availableForSpending / 30, // Budget quotidien
+            budget: plan.dailyBudget ?? prev.day.budget,
+            spent: plan.dailySpending ?? prev.day.spent,
           },
           '2weeks': {
             ...prev['2weeks'],
-            budget: plan.availableForSpending / 2, // Budget bi-hebdomadaire
+            budget: plan.biweeklyBudget ?? prev['2weeks'].budget,
+            spent: plan.biweeklySpending ?? prev['2weeks'].spent,
           },
           month: {
             ...prev.month,
-            budget: plan.availableForSpending, // Budget mensuel
+            budget: plan.availableForSpending ?? prev.month.budget,
+            spent: plan.monthlySpending ?? prev.month.spent,
           },
         }));
       }
@@ -223,22 +216,9 @@ export default function ModernHomeScreen({ navigation }: Props) {
 
   const formatAmount = useCallback(
     (value: number, fractionalDigits: number = 2) => {
-    const currencyToLocale: Record<Currency, string> = {
-      USD: 'en-US',
-      EUR: 'fr-FR',
-      GBP: 'en-GB',
-      CAD: 'en-CA',
-      XAF: 'fr-CM',
-      XOF: 'fr-SN',
-    };
-    return new Intl.NumberFormat(currencyToLocale[currency], {
-      style: 'currency',
-      currency,
-        minimumFractionDigits: fractionalDigits,
-        maximumFractionDigits: fractionalDigits,
-      }).format(value);
+      return format(value);
     },
-    [currency],
+    [format],
   );
 
   const showToast = (message: string) => {

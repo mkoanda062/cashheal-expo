@@ -7,34 +7,30 @@ import {
   TouchableOpacity,
   View,
   Switch,
+  Modal,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle } from 'react-native-svg';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+import { useCurrency, type Currency } from '../src/contexts/CurrencyContext';
+import { useLanguage, type Language, LANGUAGE_NAMES, LANGUAGE_FLAGS } from '../src/contexts/LanguageContext';
+import storage from '../src/utils/persistentStorage';
 
 interface Props {
   navigation: any;
 }
-
-type Currency = 'USD' | 'EUR' | 'GBP' | 'CAD' | 'XAF' | 'XOF';
-type Language = 'fr' | 'en' | 'es';
-type Country = 'FR' | 'US' | 'CA' | 'GB' | 'CM' | 'SN';
-
-const CURRENCIES = [
-  { code: 'EUR', symbol: '€', name: 'Euro', country: 'FR' },
-  { code: 'USD', symbol: '$', name: 'Dollar US', country: 'US' },
-  { code: 'GBP', symbol: '£', name: 'Livre Sterling', country: 'GB' },
-  { code: 'CAD', symbol: 'C$', name: 'Dollar Canadien', country: 'CA' },
-  { code: 'XAF', symbol: 'FCFA', name: 'Franc CFA', country: 'CM' },
-  { code: 'XOF', symbol: 'FCFA', name: 'Franc CFA', country: 'SN' },
-];
+type Country = 'FR' | 'US' | 'CA' | 'GB' | 'CN' | 'BF';
 
 const LANGUAGES = [
-  { code: 'fr', name: 'Français', flag: '🇫🇷' },
-  { code: 'en', name: 'English', flag: '🇺🇸' },
-  { code: 'es', name: 'Español', flag: '🇪🇸' },
+  { code: 'fr' as Language, name: 'Français', flag: '🇫🇷' },
+  { code: 'en' as Language, name: 'English', flag: '🇺🇸' },
+  { code: 'es' as Language, name: 'Español', flag: '🇪🇸' },
+  { code: 'pt' as Language, name: 'Português', flag: '🇵🇹' },
+  { code: 'zh' as Language, name: '中文', flag: '🇨🇳' },
+  { code: 'ja' as Language, name: '日本語', flag: '🇯🇵' },
 ];
 
 const COUNTRIES = [
@@ -42,18 +38,36 @@ const COUNTRIES = [
   { code: 'US', name: 'États-Unis', flag: '🇺🇸' },
   { code: 'CA', name: 'Canada', flag: '🇨🇦' },
   { code: 'GB', name: 'Royaume-Uni', flag: '🇬🇧' },
-  { code: 'CM', name: 'Cameroun', flag: '🇨🇲' },
-  { code: 'SN', name: 'Sénégal', flag: '🇸🇳' },
+  { code: 'CN', name: 'Chine', flag: '🇨🇳' },
+  { code: 'BF', name: 'Burkina Faso', flag: '🇧🇫' },
+];
+
+type CurrencyOption = {
+  code: Currency;
+  name: string;
+  symbol: string;
+  flag: string;
+};
+
+const CURRENCY_OPTIONS: CurrencyOption[] = [
+  { code: 'EUR', symbol: '€', name: 'Euro', flag: '🇪🇺' },
+  { code: 'USD', symbol: '$', name: 'Dollar US', flag: '🇺🇸' },
+  { code: 'GBP', symbol: '£', name: 'Livre Sterling', flag: '🇬🇧' },
+  { code: 'CAD', symbol: 'C$', name: 'Dollar Canadien', flag: '🇨🇦' },
+  { code: 'CNY', symbol: '¥', name: 'Yuan Chinois', flag: '🇨🇳' },
+  { code: 'XOF', symbol: 'FCFA', name: 'Franc CFA (UEMOA)', flag: '🇧🇫' },
 ];
 
 const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
-  const [currency, setCurrency] = useState<Currency>('EUR');
-  const [language, setLanguage] = useState<Language>('fr');
+  const { currency, setCurrency } = useCurrency();
+  const { language, setLanguage, t } = useLanguage();
   const [country, setCountry] = useState<Country>('FR');
   const [notifications, setNotifications] = useState(true);
   const [biometric, setBiometric] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [currencyModalVisible, setCurrencyModalVisible] = useState(false);
+  const [currencyPayload, setCurrencyPayload] = useState<string | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -61,16 +75,15 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
   const loadSettings = async () => {
     try {
-      const savedCurrency = await AsyncStorage.getItem('currency');
-      const savedLanguage = await AsyncStorage.getItem('language');
-      const savedCountry = await AsyncStorage.getItem('country');
-      const savedNotifications = await AsyncStorage.getItem('notifications');
-      const savedBiometric = await AsyncStorage.getItem('biometric');
-      const savedDarkMode = await AsyncStorage.getItem('darkMode');
+      let savedBudgetPlan, savedLanguage, savedCountry, savedNotifications, savedBiometric, savedDarkMode;
+      
+      savedBudgetPlan = await storage.getItem('budgetAdvisorPlan');
+      savedLanguage = await storage.getItem('language');
+      savedCountry = await storage.getItem('country');
+      savedNotifications = await storage.getItem('notifications');
+      savedBiometric = await storage.getItem('biometric');
+      savedDarkMode = await storage.getItem('darkMode');
 
-      if (savedCurrency && CURRENCIES.find(c => c.code === savedCurrency)) {
-        setCurrency(savedCurrency as Currency);
-      }
       if (savedLanguage && LANGUAGES.find(l => l.code === savedLanguage)) {
         setLanguage(savedLanguage as Language);
       }
@@ -86,6 +99,9 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
       if (savedDarkMode !== null) {
         setDarkMode(JSON.parse(savedDarkMode));
       }
+      if (savedBudgetPlan) {
+        setCurrencyPayload(savedBudgetPlan);
+      }
     } catch (error) {
       console.error('Erreur lors du chargement des paramètres', error);
     }
@@ -93,15 +109,15 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
   const saveSetting = async (key: string, value: any) => {
     try {
-      await AsyncStorage.setItem(key, JSON.stringify(value));
+      await storage.setItem(key, JSON.stringify(value));
     } catch (error) {
       console.error(`Erreur lors de la sauvegarde de ${key}`, error);
     }
   };
 
-  const handleCurrencyChange = (newCurrency: Currency) => {
-    setCurrency(newCurrency);
-    saveSetting('currency', newCurrency);
+  const handleCurrencyChange = async (newCurrency: Currency) => {
+    await setCurrency(newCurrency);
+    setCurrencyModalVisible(false);
   };
 
   const handleLanguageChange = (newLanguage: Language) => {
@@ -205,30 +221,24 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   );
 
   const renderCurrencySelector = () => {
-    const selectedCurrency = CURRENCIES.find(curr => curr.code === currency);
-    
+    const selectedCurrency = CURRENCY_OPTIONS.find(curr => curr.code === currency);
+
     return (
       <View style={styles.compactSelector}>
         <TouchableOpacity
           style={styles.compactSelectorButton}
-          onPress={() => {
-            // Ici on pourrait ouvrir un modal ou une liste déroulante
-            Alert.alert(
-              'Choisir une devise',
-              'Sélectionnez votre devise préférée',
-              CURRENCIES.map(curr => ({
-                text: `${curr.flag} ${curr.name} (${curr.symbol})`,
-                onPress: () => handleCurrencyChange(curr.code as Currency),
-              }))
-            );
-          }}
+          onPress={() => setCurrencyModalVisible(true)}
           activeOpacity={0.8}
         >
-          <Text style={styles.compactSelectorFlag}>{selectedCurrency?.flag}</Text>
-          <View style={styles.compactSelectorText}>
-            <Text style={styles.compactSelectorTitle}>{selectedCurrency?.name}</Text>
-            <Text style={styles.compactSelectorSubtitle}>{selectedCurrency?.symbol} {selectedCurrency?.code}</Text>
-          </View>
+          {selectedCurrency && (
+            <Text style={styles.compactSelectorFlag}>{selectedCurrency.flag}</Text>
+          )}
+          {selectedCurrency && (
+            <View style={styles.compactSelectorText}>
+              <Text style={styles.compactSelectorTitle}>{selectedCurrency.name}</Text>
+              <Text style={styles.compactSelectorSubtitle}>{selectedCurrency.symbol} {selectedCurrency.code}</Text>
+            </View>
+          )}
           <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
             <Path
               d="M6 9L12 15L18 9"
@@ -243,6 +253,61 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     );
   };
 
+  const renderCurrencyModal = () => (
+    <Modal
+      transparent
+      visible={currencyModalVisible}
+      animationType="fade"
+      onRequestClose={() => setCurrencyModalVisible(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Choisir une devise</Text>
+          <FlatList
+            data={CURRENCY_OPTIONS}
+            keyExtractor={(item) => item.code}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[
+                  styles.modalOption,
+                  item.code === currency && styles.modalOptionSelected,
+                ]}
+                onPress={() => handleCurrencyChange(item.code)}
+              >
+                <Text style={styles.modalOptionFlag}>{item.flag}</Text>
+                <View style={styles.modalOptionText}>
+                  <Text style={styles.modalOptionTitle}>{item.name}</Text>
+                  <Text style={styles.modalOptionSubtitle}>{item.symbol} {item.code}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+            ItemSeparatorComponent={() => <View style={styles.modalSeparator} />}
+            ListFooterComponent={currencyPayload ? (
+              <TouchableOpacity
+                style={styles.modalFooter}
+                onPress={async () => {
+                  try {
+                    const plan = JSON.parse(currencyPayload);
+                    if (plan?.currency && CURRENCY_OPTIONS.find(c => c.code === plan.currency)) {
+                      await handleCurrencyChange(plan.currency as Currency);
+                    }
+                  } catch (error) {
+                    console.warn('Impossible de charger la devise du plan sauvegardé', error);
+                  }
+                }}
+              >
+                <Text style={styles.modalFooterText}>Utiliser la devise du plan sauvegardé</Text>
+              </TouchableOpacity>
+            ) : undefined}
+          />
+          <TouchableOpacity style={styles.modalCloseButton} onPress={() => setCurrencyModalVisible(false)}>
+            <Text style={styles.modalCloseText}>Fermer</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
   const renderLanguageSelector = () => {
     const selectedLanguage = LANGUAGES.find(lang => lang.code === language);
     
@@ -252,7 +317,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           style={styles.compactSelectorButton}
           onPress={() => {
             Alert.alert(
-              'Choisir une langue',
+              t('settings.language'),
               'Sélectionnez votre langue préférée',
               LANGUAGES.map(lang => ({
                 text: `${lang.flag} ${lang.name}`,
@@ -289,7 +354,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           style={styles.compactSelectorButton}
           onPress={() => {
             Alert.alert(
-              'Choisir un pays',
+              t('settings.country'),
               'Sélectionnez votre pays',
               COUNTRIES.map(c => ({
                 text: `${c.flag} ${c.name}`,
@@ -324,7 +389,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
       
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Paramètres</Text>
+          <Text style={styles.headerTitle}>{t('settings.title')}</Text>
           <Text style={styles.headerSubtitle}>Personnalisez votre expérience</Text>
         </View>
 
@@ -337,23 +402,24 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.sectionTitle}>Préférences</Text>
               
               <View style={styles.sectionCard}>
-                <Text style={styles.sectionCardTitle}>Devise</Text>
+                <Text style={styles.sectionCardTitle}>{t('settings.currency')}</Text>
                 {renderCurrencySelector()}
               </View>
+              {renderCurrencyModal()}
 
               <View style={styles.sectionCard}>
-                <Text style={styles.sectionCardTitle}>Langue</Text>
+                <Text style={styles.sectionCardTitle}>{t('settings.language')}</Text>
                 {renderLanguageSelector()}
               </View>
 
               <View style={styles.sectionCard}>
-                <Text style={styles.sectionCardTitle}>Pays</Text>
+                <Text style={styles.sectionCardTitle}>{t('settings.country')}</Text>
                 {renderCountrySelector()}
               </View>
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Notifications</Text>
+              <Text style={styles.sectionTitle}>{t('settings.notifications')}</Text>
               
               <View style={styles.sectionCard}>
                 {renderSettingItem(
@@ -687,6 +753,74 @@ const styles = StyleSheet.create({
   compactSelectorSubtitle: {
     fontSize: 14,
     color: '#64748B',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    maxHeight: '80%',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0A5C47',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+  },
+  modalOptionSelected: {
+    backgroundColor: '#E6F6EE',
+  },
+  modalOptionFlag: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  modalOptionText: {
+    flex: 1,
+  },
+  modalOptionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0A5C47',
+  },
+  modalOptionSubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  modalSeparator: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 4,
+  },
+  modalCloseButton: {
+    marginTop: 16,
+    alignSelf: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    backgroundColor: '#0AB17A',
+  },
+  modalCloseText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 15,
   },
 });
 

@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useNavigation } from '@react-navigation/native';
+import storage from '../src/utils/persistentStorage';
 
 const STORAGE_KEY = 'budgetAdvisorPlan';
 
@@ -34,7 +35,7 @@ export default function DetailsScreen() {
     const weekly = available / 4;
     const payload = { monthlyIncome: income, savingsTarget: target, available, daily, weekly };
     setPlan(payload);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    await storage.setItem(STORAGE_KEY, JSON.stringify(payload));
   };
 
   return (
