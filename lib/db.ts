@@ -95,6 +95,11 @@ export async function updateCategoryAmount(key: string, delta: number): Promise<
   await db.runAsync('UPDATE categories SET amount = amount + ? WHERE key = ?;', [delta, key]);
 }
 
+export async function updateCategory(key: string, amount: number): Promise<void> {
+  const db = await getDatabase();
+  await db.runAsync('UPDATE categories SET amount = ? WHERE key = ?;', [amount, key]);
+}
+
 export async function addTransaction(type: 'income' | 'expense', amount: number, categoryKey?: string | null): Promise<void> {
   const db = await getDatabase();
   await db.runAsync('INSERT INTO transactions (type, categoryKey, amount, createdAt) VALUES (?, ?, ?, ?);', [

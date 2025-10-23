@@ -18,6 +18,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Line, Path, Polygon, Polyline } from 'react-native-svg';
 import { Category, getCategories } from '../lib/db';
+import { useFocusEffect } from '@react-navigation/native';
 
 type Currency = 'USD' | 'EUR' | 'GBP' | 'CAD' | 'XAF' | 'XOF';
 type PeriodKey = 'day' | '2weeks' | 'month';
@@ -141,13 +142,17 @@ const LeisureIcon = () => (
   </Svg>
 );
 
-const CATEGORY_ICONS: Record<(typeof CATEGORY_ORDER)[number], () => JSX.Element> = {
+const CATEGORY_ICONS: Record<(typeof CATEGORY_ORDER)[number], () => React.JSX.Element> = {
   food: FoodIcon,
   shopping: ShoppingIcon,
   leisure: LeisureIcon,
 };
 
-export default function ModernHomeScreen() {
+interface Props {
+  navigation: any;
+}
+
+export default function ModernHomeScreen({ navigation }: Props) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [currency, setCurrency] = useState<Currency>('USD');
   const [period, setPeriod] = useState<PeriodKey>('day');
@@ -159,31 +164,62 @@ export default function ModernHomeScreen() {
   const [expenseModalVisible, setExpenseModalVisible] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'remove'>('add');
   const [modalAmount, setModalAmount] = useState('');
+  const [modalCategory, setModalCategory] = useState<(typeof CATEGORY_ORDER)[number]>('food');
 
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    (async () => {
-      try {
-        const savedCurrency = await AsyncStorage.getItem('currency');
-        if (
-          savedCurrency === 'USD' ||
-          savedCurrency === 'EUR' ||
-          savedCurrency === 'GBP' ||
-          savedCurrency === 'CAD' ||
-          savedCurrency === 'XAF' ||
-          savedCurrency === 'XOF'
-        ) {
-          setCurrency(savedCurrency);
-        }
-
-        const loadedCategories = await getCategories();
-        setCategories(loadedCategories);
-      } catch (error) {
-        console.error('Erreur lors du chargement des données', error);
-      }
-    })();
+    loadData();
   }, []);
+
+  // Recharger les données quand l'écran devient actif
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
+
+  const loadData = async () => {
+    try {
+      const savedCurrency = await AsyncStorage.getItem('currency');
+      if (
+        savedCurrency === 'USD' ||
+        savedCurrency === 'EUR' ||
+        savedCurrency === 'GBP' ||
+        savedCurrency === 'CAD' ||
+        savedCurrency === 'XAF' ||
+        savedCurrency === 'XOF'
+      ) {
+        setCurrency(savedCurrency);
+      }
+
+      const loadedCategories = await getCategories();
+      setCategories(loadedCategories);
+
+      // Charger le plan budgétaire du questionnaire
+      const budgetPlan = await AsyncStorage.getItem('budgetAdvisorPlan');
+      if (budgetPlan) {
+        const plan = JSON.parse(budgetPlan);
+        // Mettre à jour les budgets basés sur le questionnaire
+        setPeriodDataMap(prev => ({
+          day: {
+            ...prev.day,
+            budget: plan.availableForSpending / 30, // Budget quotidien
+          },
+          '2weeks': {
+            ...prev['2weeks'],
+            budget: plan.availableForSpending / 2, // Budget bi-hebdomadaire
+          },
+          month: {
+            ...prev.month,
+            budget: plan.availableForSpending, // Budget mensuel
+          },
+        }));
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des données', error);
+    }
+  };
 
   const formatAmount = useCallback(
     (value: number, fractionalDigits: number = 2) => {
@@ -219,10 +255,11 @@ export default function ModernHomeScreen() {
   const openExpenseModal = (mode: 'add' | 'remove') => {
     setModalMode(mode);
     setModalAmount('');
+    setModalCategory('food');
     setExpenseModalVisible(true);
   };
 
-  const handleModalConfirm = () => {
+  const handleModalConfirm = async () => {
     const amount = parseMoneyInput(modalAmount);
     if (!amount) {
       showToast('Entre un montant valide.');
@@ -231,6 +268,7 @@ export default function ModernHomeScreen() {
 
     const delta = modalMode === 'add' ? amount : -amount;
 
+    // Mettre à jour les données de période
     setPeriodDataMap((prev) => {
       const current = prev[period];
       const updated: PeriodPreset = {
@@ -244,6 +282,30 @@ export default function ModernHomeScreen() {
         [period]: updated,
       };
     });
+
+    // Mettre à jour les catégories
+    try {
+      const updatedCategories = categories.map(category => {
+        if (category.key === modalCategory) {
+          return {
+            ...category,
+            amount: Math.max(0, category.amount + delta)
+          };
+        }
+        return category;
+      });
+      
+      setCategories(updatedCategories);
+      
+      // Sauvegarder en base de données
+      const { updateCategory } = await import('../lib/db');
+      const categoryToUpdate = updatedCategories.find(cat => cat.key === modalCategory);
+      if (categoryToUpdate) {
+        await updateCategory(categoryToUpdate.key, categoryToUpdate.amount);
+      }
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour des catégories:', error);
+    }
 
     setExpenseModalVisible(false);
     setModalAmount('');
@@ -349,22 +411,18 @@ const DonutChart = () => {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <StatusBar style="light" backgroundColor="#0AB17A" />
-      <View style={styles.wrapper}>
-        <LinearGradient
-          colors={['#0AB17A', '#0AB17A']}
-          style={styles.headerGradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        />
+      <StatusBar barStyle="light-content" />
       <KeyboardAvoidingView
-          style={styles.scrollArea}
+        style={styles.safeAreaContent}
         behavior={Platform.select({ ios: 'padding', android: undefined })}
       >
-        <ScrollView
+        <View style={styles.wrapper}>
+          <LinearGradient colors={['#0AB17A', '#0AB17A']} style={styles.headerGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+
+          <ScrollView
             contentContainerStyle={[
-            styles.scrollContent,
-            { paddingTop: 24 + insets.top, paddingBottom: 10 + Math.max(insets.bottom, 0) },
+              styles.scrollContent,
+              { paddingTop: 24 + insets.top, paddingBottom: Math.max(40, 16 + insets.bottom) },
             ]}
             showsVerticalScrollIndicator={false}
           >
@@ -485,8 +543,8 @@ const DonutChart = () => {
                       <View key={segment.key} style={styles.dashboardCategoryCard}>
                         <View style={[styles.dashboardCategoryIcon, styles[`dashboardCategoryIcon_${segment.key}`]]}>
                           {renderCategoryIcon(segment.key)}
-                </View>
-                <View>
+                        </View>
+                        <View>
                           <Text style={styles.dashboardCategoryLabel}>{segment.label}</Text>
                           <Text style={styles.dashboardCategoryAmount}>{formatAmount(segment.amount)}</Text>
                         </View>
@@ -497,112 +555,79 @@ const DonutChart = () => {
               </View>
             </View>
           </ScrollView>
-        </KeyboardAvoidingView>
 
-        <View
-          style={[
-            styles.bottomNavigationContainer,
-            { paddingBottom: insets.bottom > 0 ? insets.bottom : 12 },
-          ]}
-        >
-          <View style={styles.bottomNavigation}>
-            <TouchableOpacity style={[styles.navItem, styles.navItemActive]} activeOpacity={0.8}>
-              <View style={[styles.navIconWrapper, styles.navIconWrapperActive]}>
-                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                  <Path
-                    d="M3 9L12 2L21 9V20C21 20.55 20.55 21 20 21H4C3.45 21 3 20.55 3 20V9Z"
-                    stroke="#ffffff"
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <Path
-                    d="M9 21V13H15V21"
-                    stroke="#ffffff"
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </Svg>
-            </View>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.navItem} activeOpacity={0.8}>
-              <View style={styles.navIconWrapper}>
-                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                  <Line x1={6} y1={10} x2={6} y2={20} stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" />
-                  <Line x1={12} y1={4} x2={12} y2={20} stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" />
-                  <Line x1={18} y1={14} x2={18} y2={20} stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" />
-                </Svg>
-            </View>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.navItem} activeOpacity={0.8}>
-              <View style={styles.navIconWrapper}>
-                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                  <Polyline points="17,2 21,6 17,10" stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                  <Path d="M3 6H21" stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                  <Polyline points="7,22 3,18 7,14" stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                  <Path d="M21 18H3" stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                </Svg>
-          </View>
-              </TouchableOpacity>
-            <TouchableOpacity style={styles.navItem} activeOpacity={0.8}>
-              <View style={styles.navIconWrapper}>
-                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                  <Polygon points="12 2 2 7 12 12 22 7" stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                  <Polyline points="2 12 12 17 22 12" stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                  <Polyline points="2 17 12 22 22 17" stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                </Svg>
-              </View>
-              </TouchableOpacity>
-            <TouchableOpacity style={styles.navItem} activeOpacity={0.8}>
-              <View style={styles.navIconWrapper}>
-                <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-                  <Circle cx={12} cy={7} r={4} stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                  <Path d="M20 21V19C20 16.7909 18.2091 15 16 15H8C5.79086 15 4 16.7909 4 19V21" stroke="#0A5C47" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                </Svg>
-              </View>
-              </TouchableOpacity>
-          </View>
-            </View>
           </View>
 
-      <Modal visible={expenseModalVisible} transparent animationType="fade" onRequestClose={() => setExpenseModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.select({ ios: 'padding', android: undefined })}
-            style={styles.modalContainer}
-          >
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>
-                {modalMode === 'add' ? 'Ajouter une dépense' : 'Annuler une dépense'}
-              </Text>
-              <TextInput
-                style={styles.modalInput}
-                value={modalAmount}
-                onChangeText={setModalAmount}
-                keyboardType="numeric"
-                placeholder="Montant"
-                placeholderTextColor="#95A5A6"
-              />
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalCancelButton]}
-                  onPress={() => setExpenseModalVisible(false)}
-                >
-                  <Text style={styles.modalCancelText}>Fermer</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalConfirmButton]}
-                  onPress={handleModalConfirm}
-                  activeOpacity={0.9}
-                >
-                  <Text style={styles.modalConfirmText}>Valider</Text>
+        <Modal visible={expenseModalVisible} transparent animationType="fade" onRequestClose={() => setExpenseModalVisible(false)}>
+          <View style={styles.modalOverlay}>
+            <KeyboardAvoidingView
+              behavior={Platform.select({ ios: 'padding', android: undefined })}
+              style={styles.modalContainer}
+            >
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>
+                  {modalMode === 'add' ? 'Ajouter une dépense' : 'Annuler une dépense'}
+                </Text>
+                
+                <Text style={styles.modalLabel}>Catégorie</Text>
+                <View style={styles.categorySelector}>
+                  {CATEGORY_ORDER.map((categoryKey) => {
+                    const category = CATEGORY_FALLBACKS[categoryKey];
+                    const isSelected = modalCategory === categoryKey;
+                    return (
+                      <TouchableOpacity
+                        key={categoryKey}
+                        style={[
+                          styles.categoryOption,
+                          isSelected && styles.categoryOptionSelected,
+                          { backgroundColor: isSelected ? category.color : '#F9FAFB' }
+                        ]}
+                        onPress={() => setModalCategory(categoryKey)}
+                        activeOpacity={0.8}
+                      >
+                        <View style={[styles.categoryIcon, { backgroundColor: isSelected ? '#FFFFFF' : category.color }]}>
+                          {renderCategoryIcon(categoryKey)}
+                        </View>
+                        <Text style={[
+                          styles.categoryLabel,
+                          { color: isSelected ? '#FFFFFF' : '#0A5C47' }
+                        ]}>
+                          {category.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <Text style={styles.modalLabel}>Montant</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={modalAmount}
+                  onChangeText={setModalAmount}
+                  keyboardType="numeric"
+                  placeholder="Montant"
+                  placeholderTextColor="#95A5A6"
+                />
+                <View style={styles.modalButtons}>
+              <TouchableOpacity
+                    style={[styles.modalButton, styles.modalCancelButton]}
+                    onPress={() => setExpenseModalVisible(false)}
+                  >
+                    <Text style={styles.modalCancelText}>Fermer</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                    style={[styles.modalButton, styles.modalConfirmButton]}
+                    onPress={handleModalConfirm}
+                    activeOpacity={0.9}
+              >
+                    <Text style={styles.modalConfirmText}>Valider</Text>
               </TouchableOpacity>
             </View>
-            </View>
-          </KeyboardAvoidingView>
           </View>
-      </Modal>
+            </KeyboardAvoidingView>
+          </View>
+        </Modal>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -611,6 +636,9 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#0AB17A',
+  },
+  safeAreaContent: {
+    flex: 1,
   },
   wrapper: {
     flex: 1,
@@ -998,5 +1026,73 @@ const styles = StyleSheet.create({
   modalConfirmText: {
     color: '#FFFFFF',
     fontWeight: '600',
+  },
+  quickStatsContainer: {
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    backgroundColor: '#E6F6EE',
+  },
+  quickStatsButton: {
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    shadowColor: '#0AB17A',
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 6,
+    marginTop: 12,
+  },
+  quickStatsLabel: {
+    marginLeft: 12,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  modalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0A5C47',
+    marginBottom: 12,
+    marginTop: 16,
+  },
+  categorySelector: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 8,
+  },
+  categoryOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  categoryOptionSelected: {
+    borderColor: 'transparent',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  categoryIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  categoryLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
   },
 });

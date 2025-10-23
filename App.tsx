@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, SafeAreaView, Button, FlatList } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import React, { useEffect } from 'react';
+import { NavigationContainer, DefaultTheme, NavigatorScreenParams } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
+
 import ModernHomeScreen from './screens/ModernHomeScreen';
 import DetailsScreen from './screens/DetailsScreen';
 import TransactionsScreen from './screens/TransactionsScreen';
@@ -12,81 +15,107 @@ import SecurityCodeScreen from './screens/SecurityCodeScreen';
 import ForgotPasswordScreen from './screens/ForgotPasswordScreen';
 import PasswordChangedSuccessScreen from './screens/PasswordChangedSuccessScreen';
 import FaceIdSetupScreen from './screens/FaceIdSetupScreen';
-import { initializeDatabase, addNote, getNotes } from './lib/db';
+import BudgetAdvisorScreen from './screens/BudgetAdvisorScreen';
+import StatisticsScreen from './screens/StatisticsScreen';
 
-const Stack = createNativeStackNavigator();
+const RootStack = createNativeStackNavigator();
+const AppTabs = createBottomTabNavigator();
 
-export default function App() {
-  const [notes, setNotes] = useState<{ id: number; title: string }[]>([]);
+const NAV_THEME = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: '#E6F6EE',
+  },
+};
 
-  useEffect(() => {
-    (async () => {
-      await initializeDatabase();
-      const data = await getNotes();
-      setNotes(data);
-    })();
-  }, []);
-
-  const handleAdd = async () => {
-    await addNote('Note ' + new Date().toLocaleTimeString());
-    const data = await getNotes();
-    setNotes(data);
-  };
-
+function MainTabs() {
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Splash">
-        <Stack.Screen
-          name="Splash"
-          component={SplashScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="SecurityCode" component={SecurityCodeScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="PasswordChangedSuccess" component={PasswordChangedSuccessScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="FaceIdSetup" component={FaceIdSetupScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Home" component={ModernHomeScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Details" component={DetailsScreen} />
-        <Stack.Screen name="Transactions" component={TransactionsScreen} />
-        <Stack.Screen name="Settings" component={SettingsScreen} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <AppTabs.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarStyle: {
+          backgroundColor: '#E6F6EE',
+          borderTopWidth: 0,
+          height: 68,
+          paddingBottom: 16,
+          paddingTop: 10,
+        },
+        tabBarActiveTintColor: '#0AB17A',
+        tabBarInactiveTintColor: '#64748B',
+        tabBarIcon: ({ color, size }) => {
+          switch (route.name) {
+            case 'HomeTab':
+              return <Ionicons name="home" size={size} color={color} />;
+            case 'BudgetAdvisorTab':
+              return <Ionicons name="help-circle" size={size} color={color} />;
+            case 'StatisticsTab':
+              return <Ionicons name="stats-chart" size={size} color={color} />;
+            case 'SettingsTab':
+              return <Ionicons name="settings" size={size} color={color} />;
+            default:
+              return <Ionicons name="ellipse" size={size} color={color} />;
+          }
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+        },
+      })}
+    >
+      <AppTabs.Screen name="HomeTab" component={ModernHomeScreen} options={{ title: 'Accueil' }} />
+      <AppTabs.Screen name="BudgetAdvisorTab" component={BudgetAdvisorScreen} options={{ title: 'Conseiller' }} />
+      <AppTabs.Screen name="StatisticsTab" component={StatisticsScreen} options={{ title: 'Statistiques' }} />
+      <AppTabs.Screen name="SettingsTab" component={SettingsScreen} options={{ title: 'Paramètres' }} />
+    </AppTabs.Navigator>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#10b981',
-  },
-  content: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 18,
-    color: '#ffffff',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  listTitle: {
-    marginTop: 8,
-    marginBottom: 8,
-    color: '#ffffff',
-    fontWeight: '600',
-  },
-  noteItem: {
-    color: '#ffffff',
-    marginBottom: 6,
-  },
-});
+const HAS_COMPLETED_ONBOARDING = 'hasCompletedOnboarding';
+
+type RootStackParamList = {
+  Splash: undefined;
+  Onboarding: undefined;
+  SecurityCode: undefined;
+  ForgotPassword: undefined;
+  PasswordChangedSuccess: undefined;
+  FaceIdSetup: undefined;
+  BudgetAdvisor: undefined;
+  MainTabs: NavigatorScreenParams<any>;
+};
+
+export default function App() {
+  const [initialRoute, setInitialRoute] = React.useState<keyof RootStackParamList | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(HAS_COMPLETED_ONBOARDING);
+        setInitialRoute(stored ? 'MainTabs' : 'Onboarding');
+      } catch (error) {
+        console.warn('Failed to check onboarding completion', error);
+        setInitialRoute('Onboarding');
+      }
+    })();
+  }, []);
+
+  if (!initialRoute) {
+    return null;
+  }
+
+  return (
+    <NavigationContainer theme={NAV_THEME}>
+      <RootStack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
+        <RootStack.Screen name="Splash" component={SplashScreen} options={{ headerShown: false }} />
+        <RootStack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
+        <RootStack.Screen name="SecurityCode" component={SecurityCodeScreen} options={{ headerShown: false }} />
+        <RootStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ headerShown: false }} />
+        <RootStack.Screen name="PasswordChangedSuccess" component={PasswordChangedSuccessScreen} options={{ headerShown: false }} />
+        <RootStack.Screen name="FaceIdSetup" component={FaceIdSetupScreen} options={{ headerShown: false }} />
+        <RootStack.Screen name="BudgetAdvisor" component={BudgetAdvisorScreen} options={{ headerShown: false }} />
+        <RootStack.Screen name="MainTabs" component={MainTabs} />
+        <RootStack.Screen name="Details" component={DetailsScreen} />
+      </RootStack.Navigator>
+    </NavigationContainer>
+  );
+}

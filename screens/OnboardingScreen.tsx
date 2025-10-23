@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import Slide2A from '../assets/icons/onboarding-2a.svg';
 import Slide2B from '../assets/icons/onboarding-2b.svg';
@@ -67,6 +68,8 @@ const slides: SlideConfig[] = [
   },
 ];
 
+const HAS_COMPLETED_ONBOARDING = 'hasCompletedOnboarding';
+
 export default function OnboardingScreen({ navigation }: Props) {
   const { width, height } = useWindowDimensions();
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -88,7 +91,8 @@ export default function OnboardingScreen({ navigation }: Props) {
       scrollRef.current?.scrollTo({ x: nextIndex * width, animated: true });
       setCurrentIndex(nextIndex);
     } else {
-      navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+      AsyncStorage.setItem(HAS_COMPLETED_ONBOARDING, 'true').catch(() => undefined);
+      navigation.reset({ index: 0, routes: [{ name: 'BudgetAdvisor' }] });
     }
   };
 
